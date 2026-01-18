@@ -5,8 +5,8 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY client/package*.json ./client/
-COPY server/package*.json ./server/
+COPY packages/client/package*.json ./packages/client/
+COPY packages/server/package*.json ./packages/server/
 
 # Install dependencies
 RUN npm install
@@ -28,7 +28,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copy built files and production node_modules
-COPY --from=build /app/server/dist ./dist
+COPY --from=build /app/packages/server/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 
 EXPOSE 3000

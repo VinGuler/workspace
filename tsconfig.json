@@ -11,5 +11,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "references": [{ "path": "./client" }, { "path": "./server" }]
+  "references": [{ "path": "./packages/client" }, { "path": "./packages/server" }]
 }

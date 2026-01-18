@@ -13,7 +13,7 @@ export default [
       '**/dist/**',
       '**/build/**',
       '**/coverage/**',
-      'client/public/**',
+      'packages/client/public/**',
     ],
   },
 
@@ -28,7 +28,7 @@ export default [
 
   // Vue-specific settings
   {
-    files: ['client/**/*.vue'],
+    files: ['packages/client/**/*.vue'],
     languageOptions: {
       parser: vueParser,
       parserOptions: {
@@ -41,7 +41,7 @@ export default [
 
   // TypeScript files in client
   {
-    files: ['client/**/*.{ts,tsx}'],
+    files: ['packages/client/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
@@ -53,7 +53,7 @@ export default [
 
   // Server-specific settings
   {
-    files: ['server/**/*.ts'],
+    files: ['packages/server/**/*.ts'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {

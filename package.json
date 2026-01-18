@@ -10,8 +10,8 @@
   "type": "module",
   "private": true,
   "workspaces": [
-    "client",
-    "server"
+    "packages/client",
+    "packages/server"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
@@ -20,16 +20,20 @@
     "build": "npm run build -w server && npm run build -w client",
     "build:client": "npm run build -w client",
     "build:server": "npm run build -w server",
-    "test": "npm run test -ws --if-present",
+    "test": "vitest",
+    "test:client": "vitest --project client",
+    "test:server": "vitest --project server",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
-  },  "lint-staged": {
+  },
+  "lint-staged": {
     "*.{js,ts,vue,json,md}": "prettier --write",
     "*.{js,ts,vue}": "eslint --fix"
-  },  "devDependencies": {
+  },
+  "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@types/node": "^22.10.5",
     "concurrently": "^9.1.2",
@@ -42,6 +46,7 @@
     "prettier": "^3.4.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.20.0",
+    "vitest": "^4.0.17",
     "vue-eslint-parser": "^10.1.1"
   }
 }
