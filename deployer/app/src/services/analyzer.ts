@@ -1,133 +1,203 @@
-import type { PackageInfo, PackageType, Framework, BuildTool } from '../types/index.js';
-import { logger } from '../utils/logger.js';
+import type {
+  ProjectInfo,
+  ProjectType,
+  Framework,
+  BuildTool,
+  DatabaseType,
+} from '../types/index.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
-export class Analyzer {
-  async analyze(scannedPackage: any): Promise<PackageInfo> {
-    logger.debug(`Analyzing package: ${scannedPackage.name}`);
+export class AnalyzerService {
+  /**
+   * Analyzes a scanned project and enriches it with type, framework, database info
+   */
+  async analyze(scannedProject: Partial<ProjectInfo>): Promise<ProjectInfo> {
+    const deps = { ...scannedProject.dependencies, ...scannedProject.devDependencies };
 
-    const type = this.detectPackageType(scannedPackage);
-    const framework = this.detectFramework(scannedPackage);
-    const buildTool = this.detectBuildTool(scannedPackage);
-    const { hasDatabase, databaseType } = this.detectDatabase(scannedPackage);
-    const requiredEnvVars = await this.detectEnvVars(scannedPackage.path);
+    const type = this.detectProjectType(deps);
+    const framework = this.detectFramework(deps);
+    const buildTool = this.detectBuildTool(deps, scannedProject.scripts || {});
+    const { hasDatabase, databaseType } = this.detectDatabase(deps);
+    const detectedEnvVars = await this.extractEnvVars(scannedProject.path || '');
 
     return {
-      name: scannedPackage.name,
-      path: scannedPackage.path,
+      name: scannedProject.name || 'unknown',
+      path: scannedProject.path || '',
       type,
       framework,
       buildTool,
-      nodeVersion: scannedPackage.nodeVersion,
-      dependencies: scannedPackage.dependencies,
-      devDependencies: scannedPackage.devDependencies,
-      scripts: scannedPackage.scripts,
+      nodeVersion: scannedProject.nodeVersion,
+      dependencies: scannedProject.dependencies || {},
+      devDependencies: scannedProject.devDependencies || {},
+      scripts: scannedProject.scripts || {},
       hasDatabase,
       databaseType,
-      requiredEnvVars,
+      detectedEnvVars,
     };
   }
 
-  private detectPackageType(pkg: any): PackageType {
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  /**
+   * Detects project type (frontend/backend/fullstack)
+   */
+  private detectProjectType(deps: Record<string, string>): ProjectType {
+    const hasFrontend = ['vue', 'react', 'svelte', 'next', 'nuxt', '@vitejs/plugin-vue'].some(
+      (pkg) => deps[pkg]
+    );
+    const hasBackend = ['express', 'fastify', '@nestjs/core', 'koa'].some((pkg) => deps[pkg]);
 
-    const hasFrontendFramework = ['vue', 'react', 'svelte', 'angular'].some((fw) => deps[fw]);
-    const hasVite = deps['vite'] || deps['@vitejs/plugin-vue'];
-    const hasBackendFramework = ['express', 'fastify', '@nestjs/core'].some((fw) => deps[fw]);
-
-    if (hasFrontendFramework || hasVite) {
-      if (hasBackendFramework) {
-        return 'fullstack';
-      }
+    if (hasFrontend && hasBackend) {
+      return 'fullstack';
+    }
+    if (hasFrontend) {
       return 'frontend';
     }
-
-    if (hasBackendFramework) {
+    if (hasBackend) {
       return 'backend';
     }
 
-    // Check scripts for clues
-    const scripts = pkg.scripts || {};
-    if (scripts.dev?.includes('vite') || scripts.build?.includes('vite')) {
-      return 'frontend';
+    // Check for Next.js or Nuxt (fullstack frameworks)
+    if (deps['next'] || deps['nuxt']) {
+      return 'fullstack';
     }
 
-    if (scripts.dev?.includes('tsx') || scripts.dev?.includes('node')) {
-      return 'backend';
-    }
-
-    return 'unknown';
+    return 'frontend'; // Default to frontend
   }
 
-  private detectFramework(pkg: any): Framework {
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-
+  /**
+   * Detects framework
+   */
+  private detectFramework(deps: Record<string, string>): Framework | undefined {
     if (deps['vue']) return 'vue';
     if (deps['react']) return 'react';
+    if (deps['next']) return 'next';
+    if (deps['nuxt']) return 'nuxt';
     if (deps['svelte']) return 'svelte';
     if (deps['express']) return 'express';
     if (deps['fastify']) return 'fastify';
     if (deps['@nestjs/core']) return 'nest';
 
-    return 'unknown';
+    return undefined;
   }
 
-  private detectBuildTool(pkg: any): BuildTool {
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-    const scripts = pkg.scripts || {};
+  /**
+   * Detects build tool
+   */
+  private detectBuildTool(
+    deps: Record<string, string>,
+    scripts: Record<string, string>
+  ): BuildTool | undefined {
+    // Next.js has its own build system
+    if (deps['next']) return 'next';
 
-    if (deps['vite'] || scripts.build?.includes('vite')) return 'vite';
-    if (deps['webpack'] || scripts.build?.includes('webpack')) return 'webpack';
-    if (deps['esbuild'] || scripts.build?.includes('esbuild')) return 'esbuild';
-    if (deps['rollup'] || scripts.build?.includes('rollup')) return 'rollup';
-    if (scripts.build?.includes('tsc')) return 'tsc';
+    // Check dependencies first
+    if (deps['vite'] || deps['@vitejs/plugin-vue']) return 'vite';
+    if (deps['webpack']) return 'webpack';
+    if (deps['esbuild']) return 'esbuild';
+    if (deps['rollup']) return 'rollup';
 
-    return 'unknown';
+    // Check build scripts
+    const buildScript = scripts.build || '';
+    if (buildScript.includes('vite')) return 'vite';
+    if (buildScript.includes('webpack')) return 'webpack';
+    if (buildScript.includes('esbuild')) return 'esbuild';
+    if (buildScript.includes('rollup')) return 'rollup';
+    if (buildScript.includes('tsc')) return 'tsc';
+
+    return undefined;
   }
 
-  private detectDatabase(pkg: any): { hasDatabase: boolean; databaseType?: string } {
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  /**
+   * Detects database usage - KEY FEATURE
+   */
+  private detectDatabase(deps: Record<string, string>): {
+    hasDatabase: boolean;
+    databaseType?: DatabaseType;
+  } {
+    // Check for Prisma (most common)
+    if (deps['@prisma/client'] || deps['prisma']) {
+      return { hasDatabase: true, databaseType: 'prisma' };
+    }
 
-    if (deps['pg'] || deps['postgres']) return { hasDatabase: true, databaseType: 'postgresql' };
-    if (deps['mysql'] || deps['mysql2']) return { hasDatabase: true, databaseType: 'mysql' };
-    if (deps['mongodb'] || deps['mongoose']) return { hasDatabase: true, databaseType: 'mongodb' };
-    if (deps['sqlite3'] || deps['better-sqlite3'])
+    // PostgreSQL
+    if (deps['pg'] || deps['pg-promise'] || deps['postgres']) {
+      return { hasDatabase: true, databaseType: 'postgres' };
+    }
+
+    // MySQL
+    if (deps['mysql'] || deps['mysql2']) {
+      return { hasDatabase: true, databaseType: 'mysql' };
+    }
+
+    // MongoDB
+    if (deps['mongodb'] || deps['mongoose']) {
+      return { hasDatabase: true, databaseType: 'mongodb' };
+    }
+
+    // SQLite
+    if (deps['sqlite3'] || deps['better-sqlite3']) {
       return { hasDatabase: true, databaseType: 'sqlite' };
-    if (deps['@prisma/client']) return { hasDatabase: true, databaseType: 'prisma' };
+    }
 
     return { hasDatabase: false };
   }
 
-  private async detectEnvVars(packagePath: string): Promise<string[]> {
+  /**
+   * Extracts environment variables from source code (heuristic)
+   */
+  private async extractEnvVars(projectPath: string): Promise<string[]> {
     const envVars: Set<string> = new Set();
 
     try {
-      // Try to read common source files to detect environment variables
+      // Common source file locations
       const possibleFiles = [
         'src/index.ts',
         'src/index.js',
         'src/main.ts',
         'src/main.js',
         'src/server/index.ts',
+        'src/server.ts',
         'src/app.ts',
+        'index.ts',
+        'index.js',
       ];
 
       for (const file of possibleFiles) {
         try {
-          const content = await readFile(join(packagePath, file), 'utf-8');
-          // Look for process.env.VARIABLE_NAME patterns
+          const content = await readFile(join(projectPath, file), 'utf-8');
+
+          // Match process.env.VARIABLE_NAME
           const regex = /process\.env\.([A-Z_][A-Z0-9_]*)/g;
           let match;
+
           while ((match = regex.exec(content)) !== null) {
-            envVars.add(match[1]);
+            const varName = match[1];
+            // Filter out common Node.js env vars
+            if (!['NODE_ENV', 'PORT'].includes(varName)) {
+              envVars.add(varName);
+            }
           }
         } catch {
           // File doesn't exist, continue
         }
       }
+
+      // Also check for .env.example
+      try {
+        const envExample = await readFile(join(projectPath, '.env.example'), 'utf-8');
+        const lines = envExample.split('\n');
+
+        for (const line of lines) {
+          const match = line.match(/^([A-Z_][A-Z0-9_]*)\s*=/);
+          if (match && !['NODE_ENV', 'PORT'].includes(match[1])) {
+            envVars.add(match[1]);
+          }
+        }
+      } catch {
+        // .env.example doesn't exist
+      }
     } catch (error) {
-      logger.debug(`Could not detect env vars for ${packagePath}: ${error}`);
+      console.error(`Could not detect env vars for ${projectPath}:`, error);
     }
 
     return Array.from(envVars);

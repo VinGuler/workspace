@@ -2,55 +2,54 @@
 
 ## Purpose
 
-The **Deployer** is a local web application for managing production deployments of monorepo packages. It provides a unified interface to:
+The **Deployer** is a local web application for deploying projects to Vercel with custom subdomain configuration. It provides a focused interface to:
 
-- Deploy packages as production apps to various hosting vendors
-- Choose between different vendors and pricing plans
+- Deploy projects to Vercel with custom subdomain (vinguler.com)
+- Automatically detect database usage and configure connection strings
 - Track deployment history and view deployment statistics
-- Monitor app health and deployment status
+- Manage environment variables and secrets securely
 
-This is **not an AI-powered deployment tool** — it's a deterministic, safe, and transparent deployment manager that runs locally.
+This is **not an AI-powered deployment tool** — it's a deterministic, safe, and transparent deployment manager that runs locally and focuses specifically on Vercel deployments.
 
 ---
 
 ## Core Features
 
-### 1. Package Management
+### 1. Project Management
 
-- **Automatic scanning** of `/packages` directory
-- **Package detection and analysis**:
-  - Type: frontend, backend, or full-stack
-  - Build tool: Vite, webpack, TypeScript, etc.
-  - Framework: Vue, React, Express, etc.
-  - Node version requirements
-  - Database dependencies
-  - Required environment variables
+- **Project selection and analysis**:
+  - Detect project type: frontend, backend, or full-stack
+  - Identify build tool: Vite, webpack, TypeScript, etc.
+  - Detect framework: Vue, React, Express, Next.js, etc.
+  - Scan for database dependencies (Prisma, pg, mysql2, mongodb, etc.)
+  - Extract required environment variables
 
-### 2. Vendor & Plan Selection
+### 2. Vercel Deployment Configuration
 
-- **Multiple vendor support**:
-  - Frontend: Vercel, Netlify, Cloudflare Pages
-  - Backend: Railway, Render, Fly.io
-- **Plan comparison**:
-  - Cost estimates (monthly ranges)
-  - Feature comparisons
-  - Performance characteristics
-  - Limitations per vendor/plan
+- **Subdomain management**:
+  - User specifies subdomain prefix
+  - Automatic domain configuration: `{subdomain}.vinguler.com`
+  - Validation and availability checking
+- **Database detection**:
+  - Automatic detection of database usage in project
+  - Prompt for database connection string when detected
+  - Secure storage as Vercel environment variable/secret
 
 ### 3. Deployment Execution
 
-- **One-click deployments** with vendor-specific adapters
+- **One-click Vercel deployments**
 - **Real-time progress tracking** with status updates
 - **Deployment logs** for debugging
-- **Environment variable management** (secure, gitignored)
+- **Automatic environment variable injection**
+- **Custom domain assignment** on successful deployment
 
 ### 4. Deployment Statistics & History
 
-- **Per-package stats**:
+- **Per-project stats**:
   - Total deployment count
   - Last deployment timestamp
   - Current deployment status
-  - Deployment URL
+  - Deployment URL with custom subdomain
 - **Full deployment history**:
   - All historical deployments
   - Success/failure tracking
@@ -66,32 +65,36 @@ This is **not an AI-powered deployment tool** — it's a deterministic, safe, an
 - **Backend**: Express.js + TypeScript
 - **Frontend**: HTML + TypeScript (minimal, no heavy framework)
 - **Data Storage**: JSON files (local persistence)
-- **Deployment**: Vendor CLI/API adapters
+- **Deployment**: Vercel API (authenticated with VERCEL_TOKEN)
 
 ### Key Services
 
-1. **Scanner** - Detects packages in monorepo
-2. **Analyzer** - Classifies packages and extracts metadata
-3. **Planner** - Generates deployment recommendations
-4. **Executor** - Executes deployments via vendor adapters
-5. **Data Service** - Persists packages and deployment records
+1. **Scanner** - Detects projects in working directory or monorepo
+2. **Analyzer** - Classifies projects and detects database usage
+3. **Vercel Service** - Handles all Vercel API interactions
+4. **Domain Service** - Manages subdomain configuration for vinguler.com
+5. **Executor** - Executes deployments via Vercel API
+6. **Data Service** - Persists projects and deployment records
 
 ### Security
 
-- Environment variables stored in gitignored `.env` file
+- Vercel token stored in gitignored `.env` file
+- Database connection strings stored as Vercel secrets (never logged)
 - No plain-text secrets in deployment records
-- Local-only operation (no external AI/cloud dependencies)
+- Local-only operation (only communicates with Vercel API)
 
 ---
 
 ## User Workflow
 
-1. **Scan** - Analyze monorepo packages
-2. **Review** - View detected packages and their characteristics
-3. **Plan** - Review suggested vendors and plans for each package
-4. **Configure** - Select vendor, set environment variables
-5. **Deploy** - Execute deployment with real-time feedback
-6. **Monitor** - View deployment stats, history, and app status
+1. **Select Project** - Choose project to deploy from file system
+2. **Review Analysis** - View detected project type, framework, and database usage
+3. **Configure Deployment**:
+   - Enter subdomain (e.g., "myapp" → myapp.vinguler.com)
+   - If database detected: enter DATABASE_URL connection string
+   - Add any additional environment variables
+4. **Deploy** - Execute deployment to Vercel with real-time feedback
+5. **Monitor** - View deployment URL, stats, history, and status
 
 ---
 
@@ -101,5 +104,6 @@ This is **not an AI-powered deployment tool** — it's a deterministic, safe, an
 - **Safe**: Explicit confirmations, no destructive operations
 - **Transparent**: Show all steps, logs, and configuration
 - **Local-first**: Runs entirely on developer's machine
-- **Vendor-agnostic**: Support multiple hosting providers
+- **Vercel-focused**: Optimized specifically for Vercel deployments
 - **Simple**: Minimal UI, focused functionality
+- **Domain-aware**: Automatic subdomain configuration on vinguler.com

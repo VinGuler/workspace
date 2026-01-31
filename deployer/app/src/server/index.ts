@@ -1,12 +1,13 @@
+import dotenv from 'dotenv';
+// Load environment variables
+dotenv.config();
+
 import express from 'express';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
+
 import router from './routes.js';
 import { logger } from '../utils/logger.js';
-
-// Load environment variables
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,17 +28,21 @@ app.use((req, res, next) => {
 // API routes
 app.use(router);
 
-// Serve static files from public directory
+// Serve static files from public directory (if exists)
 const publicPath = join(__dirname, '..', '..', 'public');
 app.use(express.static(publicPath));
 
-// Serve client files
-const clientPath = join(__dirname, '..', 'client');
-app.use('/client', express.static(clientPath));
+// Serve compiled client JavaScript files from dist/client
+const distClientPath = join(__dirname, '..', 'client');
+app.use('/client', express.static(distClientPath));
+
+// Serve client assets (CSS, HTML) from src/client
+const srcClientPath = join(__dirname, '..', '..', 'src', 'client');
+app.use('/client', express.static(srcClientPath));
 
 // Serve index.html for root path
 app.get('/', (req, res) => {
-  res.sendFile(join(clientPath, 'index.html'));
+  res.sendFile(join(srcClientPath, 'index.html'));
 });
 
 // Error handling middleware

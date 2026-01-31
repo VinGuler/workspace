@@ -1,51 +1,66 @@
+import dotenv from 'dotenv';
+// Load environment variables
+dotenv.config();
+
 import { Router } from 'express';
-import { Scanner } from '../services/scanner.js';
-import { Analyzer } from '../services/analyzer.js';
-import { Planner } from '../services/planner.js';
-import { Executor } from '../services/executor.js';
-import * as dataService from '../services/data.js';
-import type { DeploymentConfig } from '../types/index.js';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { ScannerService } from '../services/scanner.js';
+import { AnalyzerService } from '../services/analyzer.js';
+import { VercelService } from '../services/vercel.js';
+import { ExecutorService } from '../services/executor.js';
+import { DataService } from '../services/data.js';
+import type { DeploymentConfig } from '../types/index.js';
+import { validateDeploymentConfig, validateSubdomain } from '../utils/validator.js';
 import { logger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Get repository root (go up from deployer/app/src/server to project root)
-const REPOSITORY_ROOT = join(__dirname, '..', '..', '..', '..');
-
 const router = Router();
-const scanner = new Scanner(REPOSITORY_ROOT);
-const analyzer = new Analyzer();
-const planner = new Planner();
-const executor = new Executor();
 
-// GET /api/scan - Scan packages and return analysis
-router.get('/api/scan', async (req, res) => {
+// Initialize services
+const dataService = new DataService();
+const vercelService = new VercelService(
+  process.env.VERCEL_TOKEN || '',
+  process.env.VERCEL_TEAM_ID || '',
+  process.env.VERCEL_DOMAIN || ''
+);
+const scannerService = new ScannerService();
+const analyzerService = new AnalyzerService();
+const executorService = new ExecutorService(vercelService, dataService);
+
+/**
+ * POST /api/scan - Scan packages directory for projects
+ * Body: { path?: string } (optional, defaults to ../../packages)
+ */
+router.post('/api/scan', async (req, res) => {
   try {
-    const scanResult = await scanner.scan();
-    const analyzedPackages = await Promise.all(
-      scanResult.packages.map((pkg) => analyzer.analyze(pkg))
+    // Default to scanning the packages folder relative to the deployer
+    const { path } = req.body;
+    const scanPath = path || join(__dirname, '..', '..', '..', '..', 'packages');
+
+    logger.info(`Scanning directory: ${scanPath}`);
+
+    // Scan and analyze projects
+    const scannedProjects = await scannerService.scanDirectory(scanPath);
+    const analyzedProjects = await Promise.all(
+      scannedProjects.map((project) => analyzerService.analyze(project))
     );
 
-    // Save each package to disk
-    for (const analyzedPackage of analyzedPackages) {
-      await dataService.savePackage(analyzedPackage);
-    }
+    // Save each project
+    const savedProjects = await Promise.all(
+      analyzedProjects.map((project) => dataService.saveProject(project))
+    );
 
-    const savedPackages = await dataService.getAllPackages();
+    logger.info(`Found ${savedProjects.length} projects`);
 
     res.json({
       success: true,
-      data: {
-        packages: savedPackages,
-        scannedAt: scanResult.scannedAt,
-        repositoryRoot: scanResult.repositoryRoot,
-      },
+      data: savedProjects,
     });
   } catch (error) {
+    logger.error(`Scan error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -53,23 +68,24 @@ router.get('/api/scan', async (req, res) => {
   }
 });
 
-// GET /api/packages - Get all saved packages with deployment stats
-router.get('/api/packages', async (req, res) => {
+/**
+ * GET /api/projects - Get all saved projects
+ */
+router.get('/api/projects', async (req, res) => {
   try {
-    const packages = await dataService.getAllPackages();
+    const projects = await dataService.getAllProjects();
 
-    // Enhance with deployment stats
-    const packagesWithStats = await Promise.all(
-      packages.map(async (pkg) => {
-        const latestDeployment = await dataService.getLatestDeployment(pkg.id);
+    // Enhance with latest deployment info
+    const projectsWithDeployments = await Promise.all(
+      projects.map(async (project) => {
+        const latestDeployment = await dataService.getLatestDeployment(project.id);
         return {
-          ...pkg,
+          ...project,
           latestDeployment: latestDeployment
             ? {
-                vendor: latestDeployment.vendor,
                 status: latestDeployment.status,
+                fullDomain: latestDeployment.fullDomain,
                 deployedAt: latestDeployment.completedAt || latestDeployment.startedAt,
-                deploymentUrl: latestDeployment.deploymentUrl,
               }
             : null,
         };
@@ -78,9 +94,10 @@ router.get('/api/packages', async (req, res) => {
 
     res.json({
       success: true,
-      data: packagesWithStats,
+      data: projectsWithDeployments,
     });
   } catch (error) {
+    logger.error(`Get projects error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -88,44 +105,33 @@ router.get('/api/packages', async (req, res) => {
   }
 });
 
-// GET /api/deployment-plan - Get deployment plans for all packages
-router.get('/api/deployment-plan', async (req, res) => {
+/**
+ * GET /api/projects/:id - Get a specific project
+ */
+router.get('/api/projects/:id', async (req, res) => {
   try {
-    const packages = await dataService.getAllPackages();
-    const deploymentPlans = packages.map((pkg) => planner.generatePlan(pkg));
+    const { id } = req.params;
+    const project = await dataService.getProject(id);
 
-    res.json({
-      success: true,
-      data: deploymentPlans,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-// POST /api/deploy/:packageName - Execute deployment
-router.post('/api/deploy/:packageName', async (req, res) => {
-  try {
-    const { packageName } = req.params;
-    const deploymentConfig: DeploymentConfig = req.body;
-
-    if (!deploymentConfig || !deploymentConfig.vendor) {
-      return res.status(400).json({
+    if (!project) {
+      return res.status(404).json({
         success: false,
-        error: 'Invalid deployment configuration',
+        error: 'Project not found',
       });
     }
 
-    const status = await executor.deploy(deploymentConfig);
+    // Get deployment history
+    const deployments = await dataService.getDeploymentsByProject(id);
 
     res.json({
       success: true,
-      data: status,
+      data: {
+        ...project,
+        deployments,
+      },
     });
   } catch (error) {
+    logger.error(`Get project error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -133,13 +139,51 @@ router.post('/api/deploy/:packageName', async (req, res) => {
   }
 });
 
-// GET /api/deployment-status/:id - Check deployment status
-router.get('/api/deployment-status/:id', (req, res) => {
+/**
+ * POST /api/deploy - Execute deployment
+ * Body: DeploymentConfig
+ */
+router.post('/api/deploy', async (req, res) => {
+  try {
+    const deploymentConfig: DeploymentConfig = req.body;
+
+    // Validate deployment config
+    const validation = validateDeploymentConfig(deploymentConfig);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid deployment configuration',
+        details: validation.errors,
+      });
+    }
+
+    logger.info(`Starting deployment for project: ${deploymentConfig.projectName}`);
+
+    // Start deployment (returns immediately with queued status)
+    const deployment = await executorService.deploy(deploymentConfig);
+
+    res.json({
+      success: true,
+      data: deployment,
+    });
+  } catch (error) {
+    logger.error(`Deploy error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/deployment/:id/status - Check deployment status
+ */
+router.get('/api/deployment/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
-    const status = executor.getDeploymentStatus(id);
+    const deployment = await executorService.getDeploymentStatus(id);
 
-    if (!status) {
+    if (!deployment) {
       return res.status(404).json({
         success: false,
         error: 'Deployment not found',
@@ -148,9 +192,12 @@ router.get('/api/deployment-status/:id', (req, res) => {
 
     res.json({
       success: true,
-      data: status,
+      data: deployment,
     });
   } catch (error) {
+    logger.error(
+      `Get deployment status error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -158,19 +205,54 @@ router.get('/api/deployment-status/:id', (req, res) => {
   }
 });
 
-// GET /api/deployments - Get all deployments
+/**
+ * GET /api/deployment/:id/logs - Get deployment logs
+ */
+router.get('/api/deployment/:id/logs', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deployment = await dataService.getDeployment(id);
+
+    if (!deployment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Deployment not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        logs: deployment.logs,
+        status: deployment.status,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      `Get deployment logs error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/deployments - Get all deployments
+ */
 router.get('/api/deployments', async (req, res) => {
   try {
     const deployments = await dataService.getAllDeployments();
-
-    // Sort by most recent first
-    deployments.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
     res.json({
       success: true,
       data: deployments,
     });
   } catch (error) {
+    logger.error(
+      `Get deployments error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -178,17 +260,65 @@ router.get('/api/deployments', async (req, res) => {
   }
 });
 
-// DELETE /api/data - Clear all data
-router.delete('/api/data', async (req, res) => {
+/**
+ * GET /api/subdomain/check/:subdomain - Check if subdomain is available
+ */
+router.get('/api/subdomain/check/:subdomain', async (req, res) => {
   try {
-    await dataService.clearAllData();
-    logger.info('All data cleared');
+    const { subdomain } = req.params;
+
+    // Validate subdomain format
+    const validation = validateSubdomain(subdomain);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.error,
+      });
+    }
+
+    // Check if subdomain already exists in deployments
+    const allDeployments = await dataService.getAllDeployments();
+    const fullDomain = `${subdomain}.${process.env.VERCEL_DOMAIN}`;
+    const exists = allDeployments.some((d) => d.fullDomain === fullDomain);
 
     res.json({
       success: true,
-      message: 'All data cleared successfully',
+      data: {
+        available: !exists,
+        subdomain,
+        fullDomain,
+      },
     });
   } catch (error) {
+    logger.error(
+      `Check subdomain error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/vercel/connection - Test Vercel API connection
+ */
+router.get('/api/vercel/connection', async (req, res) => {
+  try {
+    const connected = await vercelService.testConnection();
+
+    res.json({
+      success: true,
+      data: {
+        connected,
+        teamId: process.env.VERCEL_TEAM_ID,
+        domain: process.env.VERCEL_DOMAIN,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      `Test connection error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

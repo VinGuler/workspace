@@ -1,152 +1,165 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { SavedPackage, DeploymentRecord, PackageInfo } from '../types/index.js';
+import type { SavedProject, DeploymentRecord, ProjectInfo } from '../types/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const DATA_DIR = join(__dirname, '..', '..', 'data');
-const PACKAGES_FILE = join(DATA_DIR, 'packages.json');
+const PROJECTS_FILE = join(DATA_DIR, 'projects.json');
 const DEPLOYMENTS_FILE = join(DATA_DIR, 'deployments.json');
 
-// Ensure data directory exists
+/**
+ * Ensures data directory exists
+ */
 async function ensureDataDir() {
   try {
     await mkdir(DATA_DIR, { recursive: true });
-  } catch (error) {
+  } catch {
     // Directory might already exist, ignore
   }
 }
 
-// Helper to generate unique IDs
+/**
+ * Generates unique IDs
+ */
 function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
-// Package operations
-export async function getAllPackages(): Promise<SavedPackage[]> {
-  try {
-    await ensureDataDir();
-    const data = await readFile(PACKAGES_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    // File doesn't exist yet, return empty array
-    return [];
+export class DataService {
+  // Projects
+
+  async getAllProjects(): Promise<SavedProject[]> {
+    try {
+      await ensureDataDir();
+      const data = await readFile(PROJECTS_FILE, 'utf-8');
+      return JSON.parse(data);
+    } catch {
+      return [];
+    }
   }
-}
 
-export async function savePackage(packageInfo: PackageInfo): Promise<SavedPackage> {
-  const packages = await getAllPackages();
+  async saveProject(projectInfo: ProjectInfo): Promise<SavedProject> {
+    const projects = await this.getAllProjects();
 
-  // Check if package already exists (by name and path)
-  const existingIndex = packages.findIndex(
-    (p) => p.name === packageInfo.name && p.path === packageInfo.path
-  );
+    // Check if project already exists (by name and path)
+    const existingIndex = projects.findIndex(
+      (p) => p.name === projectInfo.name && p.path === projectInfo.path
+    );
 
-  let savedPackage: SavedPackage;
+    let savedProject: SavedProject;
 
-  if (existingIndex >= 0) {
-    // Update existing package
-    savedPackage = {
-      ...packages[existingIndex],
-      ...packageInfo,
-      scannedAt: new Date().toISOString(),
-    };
-    packages[existingIndex] = savedPackage;
-  } else {
-    // Create new package
-    savedPackage = {
-      ...packageInfo,
+    if (existingIndex >= 0) {
+      // Update existing project
+      savedProject = {
+        ...projects[existingIndex],
+        ...projectInfo,
+        scannedAt: new Date().toISOString(),
+      };
+      projects[existingIndex] = savedProject;
+    } else {
+      // Create new project
+      savedProject = {
+        ...projectInfo,
+        id: generateId(),
+        scannedAt: new Date().toISOString(),
+        deploymentCount: 0,
+      };
+      projects.push(savedProject);
+    }
+
+    await this.writeJSON(PROJECTS_FILE, projects);
+    return savedProject;
+  }
+
+  async getProject(id: string): Promise<SavedProject | null> {
+    const projects = await this.getAllProjects();
+    return projects.find((p) => p.id === id) || null;
+  }
+
+  async updateProject(id: string, updates: Partial<SavedProject>): Promise<void> {
+    const projects = await this.getAllProjects();
+    const index = projects.findIndex((p) => p.id === id);
+
+    if (index >= 0) {
+      projects[index] = { ...projects[index], ...updates };
+      await this.writeJSON(PROJECTS_FILE, projects);
+    }
+  }
+
+  async incrementDeploymentCount(projectId: string): Promise<void> {
+    const projects = await this.getAllProjects();
+    const index = projects.findIndex((p) => p.id === projectId);
+
+    if (index >= 0) {
+      projects[index].lastDeployedAt = new Date().toISOString();
+      projects[index].deploymentCount++;
+      await this.writeJSON(PROJECTS_FILE, projects);
+    }
+  }
+
+  // Deployments
+
+  async getAllDeployments(): Promise<DeploymentRecord[]> {
+    try {
+      await ensureDataDir();
+      const data = await readFile(DEPLOYMENTS_FILE, 'utf-8');
+      const deployments = JSON.parse(data);
+      // Sort by startedAt descending
+      return deployments.sort(
+        (a: DeploymentRecord, b: DeploymentRecord) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  async getDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]> {
+    const deployments = await this.getAllDeployments();
+    return deployments.filter((d) => d.projectId === projectId);
+  }
+
+  async getDeployment(id: string): Promise<DeploymentRecord | null> {
+    const deployments = await this.getAllDeployments();
+    return deployments.find((d) => d.id === id) || null;
+  }
+
+  async saveDeployment(deployment: Omit<DeploymentRecord, 'id'>): Promise<DeploymentRecord> {
+    const deployments = await this.getAllDeployments();
+
+    const newDeployment: DeploymentRecord = {
+      ...deployment,
       id: generateId(),
-      scannedAt: new Date().toISOString(),
-      deploymentCount: 0,
     };
-    packages.push(savedPackage);
+
+    deployments.push(newDeployment);
+    await this.writeJSON(DEPLOYMENTS_FILE, deployments);
+
+    return newDeployment;
   }
 
-  await writeFile(PACKAGES_FILE, JSON.stringify(packages, null, 2));
-  return savedPackage;
-}
+  async updateDeployment(id: string, updates: Partial<DeploymentRecord>): Promise<void> {
+    const deployments = await this.getAllDeployments();
+    const index = deployments.findIndex((d) => d.id === id);
 
-export async function getPackageById(id: string): Promise<SavedPackage | null> {
-  const packages = await getAllPackages();
-  return packages.find((p) => p.id === id) || null;
-}
-
-export async function updatePackageDeployment(packageId: string): Promise<void> {
-  const packages = await getAllPackages();
-  const packageIndex = packages.findIndex((p) => p.id === packageId);
-
-  if (packageIndex >= 0) {
-    packages[packageIndex].lastDeployedAt = new Date().toISOString();
-    packages[packageIndex].deploymentCount++;
-    await writeFile(PACKAGES_FILE, JSON.stringify(packages, null, 2));
+    if (index >= 0) {
+      deployments[index] = { ...deployments[index], ...updates };
+      await this.writeJSON(DEPLOYMENTS_FILE, deployments);
+    }
   }
-}
 
-// Deployment operations
-export async function getAllDeployments(): Promise<DeploymentRecord[]> {
-  try {
+  async getLatestDeployment(projectId: string): Promise<DeploymentRecord | null> {
+    const deployments = await this.getDeploymentsByProject(projectId);
+    return deployments.length > 0 ? deployments[0] : null;
+  }
+
+  // Utility
+
+  private async writeJSON<T>(file: string, data: T): Promise<void> {
     await ensureDataDir();
-    const data = await readFile(DEPLOYMENTS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    // File doesn't exist yet, return empty array
-    return [];
+    await writeFile(file, JSON.stringify(data, null, 2), 'utf-8');
   }
-}
-
-export async function saveDeployment(
-  deployment: Omit<DeploymentRecord, 'id'>
-): Promise<DeploymentRecord> {
-  const deployments = await getAllDeployments();
-
-  const newDeployment: DeploymentRecord = {
-    ...deployment,
-    id: generateId(),
-  };
-
-  deployments.push(newDeployment);
-  await writeFile(DEPLOYMENTS_FILE, JSON.stringify(deployments, null, 2));
-
-  return newDeployment;
-}
-
-export async function updateDeploymentStatus(
-  id: string,
-  updates: Partial<DeploymentRecord>
-): Promise<void> {
-  const deployments = await getAllDeployments();
-  const deploymentIndex = deployments.findIndex((d) => d.id === id);
-
-  if (deploymentIndex >= 0) {
-    deployments[deploymentIndex] = {
-      ...deployments[deploymentIndex],
-      ...updates,
-    };
-    await writeFile(DEPLOYMENTS_FILE, JSON.stringify(deployments, null, 2));
-  }
-}
-
-export async function getDeploymentsByPackage(packageId: string): Promise<DeploymentRecord[]> {
-  const deployments = await getAllDeployments();
-  return deployments.filter((d) => d.packageId === packageId);
-}
-
-export async function getLatestDeployment(packageId: string): Promise<DeploymentRecord | null> {
-  const deployments = await getDeploymentsByPackage(packageId);
-  if (deployments.length === 0) return null;
-
-  // Sort by startedAt descending
-  deployments.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-
-  return deployments[0];
-}
-
-// Clear all data
-export async function clearAllData(): Promise<void> {
-  await ensureDataDir();
-  await writeFile(PACKAGES_FILE, JSON.stringify([], null, 2));
-  await writeFile(DEPLOYMENTS_FILE, JSON.stringify([], null, 2));
 }

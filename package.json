@@ -31,7 +31,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "deployer": "cd deployer/app && npm install && npm run dev"
+    "deployer": "cd deployer/app && npm install && npm run build && npm start",
+    "deployer:dev": "cd deployer/app && npm run dev"
   },
   "lint-staged": {
     "*.{js,ts,vue,json,md}": "prettier --write",

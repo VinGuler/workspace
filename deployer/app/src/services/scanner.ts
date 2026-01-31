@@ -1,69 +1,98 @@
-import { readdir, readFile } from 'fs/promises';
-import { join, resolve } from 'path';
-import type { ScanResult } from '../types/index.js';
-import { logger } from '../utils/logger.js';
+import { readdir, readFile, stat } from 'fs/promises';
+import { join } from 'path';
+import type { ProjectInfo } from '../types/index.js';
 
-export class Scanner {
-  private repositoryRoot: string;
-  private packagesDir: string;
-
-  constructor(repositoryRoot: string) {
-    this.repositoryRoot = resolve(repositoryRoot);
-    this.packagesDir = join(this.repositoryRoot, 'packages');
-  }
-
-  async scan(): Promise<ScanResult> {
-    logger.info(`Scanning packages directory: ${this.packagesDir}`);
+export class ScannerService {
+  /**
+   * Scans a directory for projects (looks for package.json files)
+   */
+  async scanDirectory(scanPath: string): Promise<Partial<ProjectInfo>[]> {
+    const projects: Partial<ProjectInfo>[] = [];
 
     try {
-      const packageDirs = await this.getPackageDirectories();
-      const packages = await Promise.all(packageDirs.map((dir) => this.readPackageInfo(dir)));
+      // Check if the path itself is a project
+      if (await this.hasPackageJson(scanPath)) {
+        const project = await this.parsePackageJson(scanPath);
+        if (project) {
+          projects.push(project);
+        }
+      }
 
-      const validPackages = packages.filter((pkg) => pkg !== null);
+      // Also check subdirectories (for monorepo support)
+      const entries = await readdir(scanPath, { withFileTypes: true });
 
-      logger.info(`Found ${validPackages.length} packages`);
+      for (const entry of entries) {
+        if (entry.isDirectory() && !this.shouldSkipDirectory(entry.name)) {
+          const subPath = join(scanPath, entry.name);
 
-      return {
-        packages: validPackages,
-        scannedAt: new Date(),
-        repositoryRoot: this.repositoryRoot,
-      };
+          if (await this.hasPackageJson(subPath)) {
+            const project = await this.parsePackageJson(subPath);
+            if (project) {
+              projects.push(project);
+            }
+          }
+        }
+      }
     } catch (error) {
-      logger.error(`Failed to scan packages: ${error}`);
-      throw error;
+      console.error('Error scanning directory:', error);
+      throw new Error(`Failed to scan directory: ${(error as Error).message}`);
+    }
+
+    return projects;
+  }
+
+  /**
+   * Checks if a directory has a package.json file
+   */
+  private async hasPackageJson(dirPath: string): Promise<boolean> {
+    try {
+      const packagePath = join(dirPath, 'package.json');
+      const stats = await stat(packagePath);
+      return stats.isFile();
+    } catch {
+      return false;
     }
   }
 
-  private async getPackageDirectories(): Promise<string[]> {
+  /**
+   * Parses package.json and extracts project metadata
+   */
+  private async parsePackageJson(dirPath: string): Promise<Partial<ProjectInfo> | null> {
     try {
-      const entries = await readdir(this.packagesDir, { withFileTypes: true });
-      return entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => join(this.packagesDir, entry.name));
-    } catch (error) {
-      logger.error(`Failed to read packages directory: ${error}`);
-      return [];
-    }
-  }
-
-  private async readPackageInfo(packagePath: string): Promise<any> {
-    try {
-      const packageJsonPath = join(packagePath, 'package.json');
-      const content = await readFile(packageJsonPath, 'utf-8');
+      const packagePath = join(dirPath, 'package.json');
+      const content = await readFile(packagePath, 'utf-8');
       const packageJson = JSON.parse(content);
 
       return {
         name: packageJson.name || 'unknown',
-        path: packagePath,
+        path: dirPath,
         dependencies: packageJson.dependencies || {},
         devDependencies: packageJson.devDependencies || {},
         scripts: packageJson.scripts || {},
         nodeVersion: packageJson.engines?.node,
-        packageJson,
       };
     } catch (error) {
-      logger.warn(`Failed to read package at ${packagePath}: ${error}`);
+      console.error(`Error parsing package.json at ${dirPath}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Directories to skip when scanning
+   */
+  private shouldSkipDirectory(name: string): boolean {
+    const skipList = [
+      'node_modules',
+      'dist',
+      'build',
+      '.git',
+      '.next',
+      '.nuxt',
+      'coverage',
+      '.vscode',
+      '.idea',
+    ];
+
+    return skipList.includes(name) || name.startsWith('.');
   }
 }

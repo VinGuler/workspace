@@ -1,465 +1,603 @@
-// API Base URL
-const API_BASE = '';
+// Client-side TypeScript for Vercel Deployer
+
+// Types
+interface Project {
+  id: string;
+  name: string;
+  path: string;
+  type: 'frontend' | 'backend' | 'fullstack';
+  framework?: string;
+  hasDatabase: boolean;
+  databaseType?: string;
+  detectedEnvVars: string[];
+}
+
+interface Deployment {
+  id: string;
+  projectId: string;
+  projectName: string;
+  status: 'queued' | 'building' | 'ready' | 'error';
+  subdomain: string;
+  fullDomain: string;
+  startedAt: string;
+  completedAt?: string;
+  logs: string[];
+}
 
 // State
-let packages: any[] = [];
-let deploymentPlans: any[] = [];
-let currentDeployment: any = null;
+let projects: Project[] = [];
+let currentDeployment: Deployment | null = null;
+let pollInterval: number | null = null;
 
-// DOM Elements
-const scanBtn = document.getElementById('scan-btn') as HTMLButtonElement;
-const clearDataBtn = document.getElementById('clear-data-btn') as HTMLButtonElement;
-const packagesList = document.getElementById('packages-list') as HTMLDivElement;
-const plansList = document.getElementById('plans-list') as HTMLDivElement;
-const packageSelect = document.getElementById('package-select') as HTMLSelectElement;
-const vendorSelect = document.getElementById('vendor-select') as HTMLSelectElement;
-const deployForm = document.getElementById('deploy-form') as HTMLFormElement;
-const envVarsInputs = document.getElementById('env-vars-inputs') as HTMLDivElement;
-const deploymentProgress = document.getElementById('deployment-progress') as HTMLDivElement;
-const statusBadge = document.getElementById('status-badge') as HTMLDivElement;
-const deploymentLogs = document.getElementById('deployment-logs') as HTMLDivElement;
-const deploymentUrl = document.getElementById('deployment-url') as HTMLDivElement;
-const historyList = document.getElementById('history-list') as HTMLDivElement;
-
-// Initialize - Load existing packages on page load
-async function initialize() {
-  await loadExistingPackages();
-}
-
-// Load existing packages from data
-async function loadExistingPackages() {
-  try {
-    const response = await fetch(`${API_BASE}/api/packages`);
-    const result = await response.json();
-
-    if (result.success && result.data.length > 0) {
-      packages = result.data;
-      await loadDeploymentPlans();
-      renderPackages();
-      renderDeploymentPlans();
-      populatePackageSelect();
-    }
-  } catch (error) {
-    console.error('Error loading packages:', error);
-    // Not a critical error, user can still scan
-  }
-}
-
-// Tab Navigation
-document.querySelectorAll('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const tabName = btn.getAttribute('data-tab');
-    if (!tabName) return;
-
-    // Update active tab button
-    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    // Update active tab content
-    document.querySelectorAll('.tab-content').forEach((content) => {
-      content.classList.remove('active');
-    });
-    document.getElementById(tabName)?.classList.add('active');
-
-    // Load data if needed
-    if (tabName === 'history') {
-      loadDeploymentHistory();
-    }
+// API Helper
+async function api(endpoint: string, options: RequestInit = {}): Promise<any> {
+  const response = await fetch(endpoint, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
-});
 
-// Scan Repository
-scanBtn.addEventListener('click', async () => {
-  scanBtn.disabled = true;
-  scanBtn.textContent = 'Scanning...';
+  const data = await response.json();
 
-  try {
-    const response = await fetch(`${API_BASE}/api/scan`);
-    const result = await response.json();
-
-    if (result.success) {
-      packages = result.data.packages;
-      await loadDeploymentPlans();
-      renderPackages();
-      renderDeploymentPlans();
-      populatePackageSelect();
-    } else {
-      alert(`Scan failed: ${result.error}`);
-    }
-  } catch (error) {
-    alert(`Error scanning repository: ${error}`);
-  } finally {
-    scanBtn.disabled = false;
-    scanBtn.textContent = 'Scan Repository';
+  if (!data.success) {
+    throw new Error(data.error || 'Request failed');
   }
-});
 
-// Clear All Data
-clearDataBtn.addEventListener('click', async () => {
-  const confirmed = confirm(
-    'Are you sure you want to clear all data? This will delete all packages and deployment history.'
-  );
+  return data.data;
+}
 
-  if (!confirmed) return;
+// Initialize app
+async function init() {
+  setupEventListeners();
+  await checkVercelConnection();
+  await loadProjects();
+  await loadDeploymentHistory();
+  // Automatically scan packages on load
+  await scanProjects();
+}
 
-  clearDataBtn.disabled = true;
-  clearDataBtn.textContent = 'Clearing...';
-
-  try {
-    const response = await fetch(`${API_BASE}/api/data`, {
-      method: 'DELETE',
+// Setup event listeners
+function setupEventListeners() {
+  // Tab navigation
+  const navTabs = document.querySelectorAll('.nav-tab');
+  navTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.getAttribute('data-tab');
+      if (tabName) switchTab(tabName);
     });
-    const result = await response.json();
+  });
 
-    if (result.success) {
-      // Clear local state
-      packages = [];
-      deploymentPlans = [];
+  // Scan button
+  document.getElementById('scan-btn')?.addEventListener('click', scanProjects);
 
-      // Clear UI
-      renderPackages();
-      renderDeploymentPlans();
-      packageSelect.innerHTML = '<option value="">-- Select a package --</option>';
-      historyList.innerHTML = '<p class="placeholder">No deployments yet</p>';
+  // Deploy form
+  document.getElementById('project-select')?.addEventListener('change', handleProjectSelect);
+  document.getElementById('subdomain-input')?.addEventListener('input', handleSubdomainInput);
+  document.getElementById('add-env-var-btn')?.addEventListener('click', () => addEnvVarRow());
+  document.getElementById('deploy-form')?.addEventListener('submit', handleDeploy);
 
-      alert('All data cleared successfully');
+  // History
+  document.getElementById('refresh-history-btn')?.addEventListener('click', loadDeploymentHistory);
+}
+
+// Tab switching
+function switchTab(tabName: string) {
+  // Update nav tabs
+  document.querySelectorAll('.nav-tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.getAttribute('data-tab') === tabName);
+  });
+
+  // Update tab content
+  document.querySelectorAll('.tab-content').forEach((content) => {
+    content.classList.toggle('active', content.id === `${tabName}-tab`);
+  });
+}
+
+// Check Vercel connection
+async function checkVercelConnection() {
+  const statusIndicator = document.getElementById('vercel-status');
+  const statusText = statusIndicator?.querySelector('.status-text');
+
+  try {
+    const data = await api('/api/vercel/connection');
+
+    if (data.connected) {
+      statusIndicator?.classList.add('connected');
+      if (statusText) statusText.textContent = 'Connected to Vercel';
     } else {
-      alert(`Failed to clear data: ${result.error}`);
+      statusIndicator?.classList.add('disconnected');
+      if (statusText) statusText.textContent = 'Disconnected';
     }
   } catch (error) {
-    alert(`Error clearing data: ${error}`);
-  } finally {
-    clearDataBtn.disabled = false;
-    clearDataBtn.textContent = 'Clear All Data';
+    statusIndicator?.classList.add('disconnected');
+    if (statusText) statusText.textContent = 'Connection failed';
+    console.error('Vercel connection check failed:', error);
   }
-});
+}
 
-// Render Packages
-function renderPackages() {
-  if (packages.length === 0) {
-    packagesList.innerHTML =
-      '<p class="placeholder">No packages found. Click "Scan Repository" to detect packages.</p>';
+// Scan projects (automatically scans /packages folder)
+async function scanProjects() {
+  try {
+    console.log('Scanning packages...');
+
+    // Backend defaults to scanning /packages folder
+    const scannedProjects = await api('/api/scan', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+
+    projects = scannedProjects;
+    renderProjects();
+    populateProjectSelect();
+
+    console.log(`Found ${projects.length} project(s)`);
+  } catch (error: any) {
+    console.error('Scan failed:', error.message);
+  }
+}
+
+// Load projects
+async function loadProjects() {
+  try {
+    projects = await api('/api/projects');
+    renderProjects();
+    populateProjectSelect();
+  } catch (error) {
+    console.error('Failed to load projects:', error);
+  }
+}
+
+// Render projects
+function renderProjects() {
+  const grid = document.getElementById('projects-grid');
+  if (!grid) return;
+
+  if (projects.length === 0) {
+    grid.innerHTML = `
+      <div class="placeholder">
+        <div class="placeholder-icon">📂</div>
+        <p>No projects yet. Click "Scan Packages" to detect projects.</p>
+      </div>
+    `;
     return;
   }
 
-  packagesList.innerHTML = packages
+  grid.innerHTML = projects
     .map(
-      (pkg) => `
-    <div class="package-card">
-      <div class="package-header">
-        <div class="package-name">${pkg.name}</div>
-        <span class="package-type type-${pkg.type}">${pkg.type}</span>
-      </div>
-
-      <div class="package-details">
-        <div><strong>Framework:</strong> ${pkg.framework}</div>
-        <div><strong>Build Tool:</strong> ${pkg.buildTool}</div>
-        ${pkg.nodeVersion ? `<div><strong>Node:</strong> ${pkg.nodeVersion}</div>` : ''}
-        ${pkg.hasDatabase ? `<div><strong>Database:</strong> ${pkg.databaseType}</div>` : ''}
-      </div>
-
-      ${
-        pkg.latestDeployment
-          ? `
-        <div class="deployment-stats">
-          <div class="stat-title">Latest Deployment</div>
-          <div class="stat-row">
-            <span class="stat-label">Vendor:</span>
-            <span class="vendor-badge">${pkg.latestDeployment.vendor}</span>
+      (project) => `
+      <div class="project-card" data-project-id="${project.id}">
+        <div class="project-header">
+          <div>
+            <div class="project-name">${project.name}</div>
+            <span class="project-type type-${project.type}">${project.type}</span>
           </div>
-          <div class="stat-row">
-            <span class="stat-label">Status:</span>
-            <span class="status-badge status-${pkg.latestDeployment.status}">${pkg.latestDeployment.status}</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label">Deployed:</span>
-            <span>${new Date(pkg.latestDeployment.deployedAt).toLocaleString()}</span>
+        </div>
+        <div class="project-info">
+          <div class="project-info-row">
+            <span>Framework:</span>
+            <strong>${project.framework || 'None'}</strong>
           </div>
           ${
-            pkg.latestDeployment.deploymentUrl
+            project.hasDatabase
               ? `
-            <div class="stat-row">
-              <a href="${pkg.latestDeployment.deploymentUrl}" target="_blank" class="deployment-link">View Deployment →</a>
-            </div>
+          <div class="project-info-row">
+            <span class="project-badge has-database">
+              🗄️ Database: ${project.databaseType}
+            </span>
+          </div>
+          `
+              : ''
+          }
+          ${
+            project.detectedEnvVars.length > 0
+              ? `
+          <div class="project-info-row">
+            <span>Env Vars:</span>
+            <strong>${project.detectedEnvVars.length} detected</strong>
+          </div>
           `
               : ''
           }
         </div>
-        <div class="deployment-count">Total Deployments: ${pkg.deploymentCount}</div>
-      `
-          : `
-        <div class="deployment-stats">
-          <div class="stat-title">Not Deployed Yet</div>
+        <div class="project-actions">
+          <button class="btn btn-primary btn-small" onclick="deployProject('${project.id}')">
+            Deploy
+          </button>
         </div>
-      `
-      }
-    </div>
-  `
+      </div>
+    `
     )
     .join('');
 }
 
-// Load Deployment Plans
-async function loadDeploymentPlans() {
-  try {
-    const response = await fetch(`${API_BASE}/api/deployment-plan`);
-    const result = await response.json();
+// Populate project select
+function populateProjectSelect() {
+  const select = document.getElementById('project-select') as HTMLSelectElement;
+  if (!select) return;
 
-    if (result.success) {
-      deploymentPlans = result.data;
-    }
-  } catch (error) {
-    console.error('Error loading deployment plans:', error);
-  }
-}
+  select.innerHTML = '<option value="">Choose a project...</option>';
 
-// Render Deployment Plans
-function renderDeploymentPlans() {
-  if (deploymentPlans.length === 0) {
-    plansList.innerHTML = '<p class="placeholder">No deployment plans available</p>';
-    return;
-  }
-
-  plansList.innerHTML = deploymentPlans
-    .map(
-      (plan) => `
-    <div class="plan-card">
-      <div class="plan-header">
-        <h3>${plan.packageName}</h3>
-        <span class="package-type type-${plan.packageType}">${plan.packageType}</span>
-      </div>
-
-      ${plan.buildCommand ? `<div><strong>Build:</strong> ${plan.buildCommand}</div>` : ''}
-      ${plan.outputDirectory ? `<div><strong>Output:</strong> ${plan.outputDirectory}</div>` : ''}
-
-      ${plan.notes.length > 0 ? `<div style="margin-top: 10px;"><strong>Notes:</strong><ul style="margin-left: 20px;">${plan.notes.map((note: string) => `<li>${note}</li>`).join('')}</ul></div>` : ''}
-
-      <div class="vendor-options">
-        <h4>Deployment Options:</h4>
-        ${plan.deploymentOptions
-          .map(
-            (option: any) => `
-          <div class="vendor-option ${option.recommended ? 'recommended' : ''}">
-            <div class="vendor-header">
-              <span class="vendor-name">${option.vendorDisplayName}</span>
-              ${option.recommended ? '<span class="recommended-badge">Recommended</span>' : ''}
-            </div>
-            <div class="cost">
-              $${option.estimatedCost.min}-${option.estimatedCost.max} ${option.estimatedCost.currency}/${option.estimatedCost.period}
-            </div>
-            <div class="features">
-              <ul>
-                ${option.features.map((feature: string) => `<li>${feature}</li>`).join('')}
-              </ul>
-            </div>
-          </div>
-        `
-          )
-          .join('')}
-      </div>
-    </div>
-  `
-    )
-    .join('');
-}
-
-// Populate Package Select
-function populatePackageSelect() {
-  packageSelect.innerHTML = '<option value="">-- Select a package --</option>';
-  packages.forEach((pkg) => {
+  projects.forEach((project) => {
     const option = document.createElement('option');
-    option.value = pkg.name;
-    option.textContent = pkg.name;
-    packageSelect.appendChild(option);
+    option.value = project.id;
+    option.textContent = project.name;
+    select.appendChild(option);
   });
 }
 
-// Package Selection Change
-packageSelect.addEventListener('change', () => {
-  const selectedPackage = packages.find((pkg) => pkg.name === packageSelect.value);
-  if (!selectedPackage) {
-    vendorSelect.innerHTML = '<option value="">-- Select a vendor --</option>';
-    envVarsInputs.innerHTML = '';
+// Deploy project (called from project card)
+(window as any).deployProject = function (projectId: string) {
+  const select = document.getElementById('project-select') as HTMLSelectElement;
+  if (select) {
+    select.value = projectId;
+    handleProjectSelect();
+  }
+
+  // Switch to deploy tab
+  switchTab('deploy');
+};
+
+// Handle project selection
+function handleProjectSelect() {
+  const select = document.getElementById('project-select') as HTMLSelectElement;
+  const projectId = select?.value;
+
+  if (!projectId) return;
+
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  // Pre-fill subdomain
+  const subdomainInput = document.getElementById('subdomain-input') as HTMLInputElement;
+  if (subdomainInput) {
+    subdomainInput.value = project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    handleSubdomainInput();
+  }
+
+  // Show database section if project has database
+  const databaseSection = document.getElementById('database-section');
+  if (databaseSection) {
+    databaseSection.style.display = project.hasDatabase ? 'block' : 'none';
+  }
+
+  // Pre-populate environment variables
+  const envVarsContainer = document.getElementById('env-vars-container');
+  if (envVarsContainer && project.detectedEnvVars.length > 0) {
+    envVarsContainer.innerHTML = '';
+    project.detectedEnvVars.forEach((varName) => {
+      addEnvVarRow(varName);
+    });
+  }
+}
+
+// Handle subdomain input
+let subdomainCheckTimeout: number | null = null;
+
+async function handleSubdomainInput() {
+  const input = document.getElementById('subdomain-input') as HTMLInputElement;
+  const validation = document.getElementById('subdomain-validation');
+  const subdomain = input?.value.trim().toLowerCase();
+
+  if (!subdomain || !validation) return;
+
+  // Clear previous timeout
+  if (subdomainCheckTimeout) {
+    clearTimeout(subdomainCheckTimeout);
+  }
+
+  // Validate format first
+  if (!/^[a-z0-9-]+$/.test(subdomain)) {
+    validation.textContent = 'Only lowercase letters, numbers, and hyphens allowed';
+    validation.className = 'input-hint error';
     return;
   }
 
-  const plan = deploymentPlans.find((p) => p.packageName === selectedPackage.name);
-  if (!plan) return;
+  validation.textContent = 'Checking availability...';
+  validation.className = 'input-hint';
 
-  // Populate vendor options
-  vendorSelect.innerHTML = '<option value="">-- Select a vendor --</option>';
-  plan.deploymentOptions.forEach((option: any) => {
-    const opt = document.createElement('option');
-    opt.value = option.vendor;
-    opt.textContent = `${option.vendorDisplayName}${option.recommended ? ' (Recommended)' : ''}`;
-    vendorSelect.appendChild(opt);
-  });
+  // Debounce API call
+  subdomainCheckTimeout = window.setTimeout(async () => {
+    try {
+      const data = await api(`/api/subdomain/check/${subdomain}`);
 
-  updateEnvVarInputs();
-});
-
-// Vendor Selection Change
-vendorSelect.addEventListener('change', updateEnvVarInputs);
-
-// Update Environment Variable Inputs
-function updateEnvVarInputs() {
-  const selectedPackage = packages.find((pkg) => pkg.name === packageSelect.value);
-  const vendor = vendorSelect.value;
-
-  if (!selectedPackage || !vendor) {
-    envVarsInputs.innerHTML = '';
-    return;
-  }
-
-  // Get required env vars for the vendor
-  const vendorEnvVars = getVendorRequiredEnvVars(vendor);
-  const packageEnvVars = selectedPackage.requiredEnvVars || [];
-  const allEnvVars = [...new Set([...vendorEnvVars, ...packageEnvVars])];
-
-  envVarsInputs.innerHTML = allEnvVars
-    .map(
-      (varName) => `
-    <div class="env-var-input">
-      <label for="env-${varName}">${varName}:</label>
-      <input type="text" id="env-${varName}" name="${varName}" placeholder="Enter ${varName}">
-    </div>
-  `
-    )
-    .join('');
+      if (data.available) {
+        validation.textContent = `✓ ${data.fullDomain} is available`;
+        validation.className = 'input-hint success';
+      } else {
+        validation.textContent = `✗ ${data.fullDomain} is already taken`;
+        validation.className = 'input-hint error';
+      }
+    } catch (error: any) {
+      validation.textContent = error.message;
+      validation.className = 'input-hint error';
+    }
+  }, 500);
 }
 
-// Get Vendor Required Env Vars
-function getVendorRequiredEnvVars(vendor: string): string[] {
-  const vendorEnvVars: Record<string, string[]> = {
-    vercel: ['VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID'],
-    railway: ['RAILWAY_TOKEN'],
-    netlify: ['NETLIFY_AUTH_TOKEN', 'NETLIFY_SITE_ID'],
-    render: ['RENDER_API_KEY'],
-  };
+// Add environment variable row
+function addEnvVarRow(varName: string = '') {
+  const container = document.getElementById('env-vars-container');
+  if (!container) return;
 
-  return vendorEnvVars[vendor] || [];
+  // Remove hint if it exists
+  const hint = container.querySelector('.env-hint');
+  if (hint) hint.remove();
+
+  const row = document.createElement('div');
+  row.className = 'env-var-row';
+  row.innerHTML = `
+    <input type="text" placeholder="KEY" value="${varName}" />
+    <input type="text" placeholder="value" />
+    <button type="button" class="btn-remove" onclick="this.parentElement.remove()">✕</button>
+  `;
+
+  container.appendChild(row);
 }
 
-// Deploy Form Submit
-deployForm.addEventListener('submit', async (e) => {
+// Handle deployment
+async function handleDeploy(e: Event) {
   e.preventDefault();
 
-  const packageName = packageSelect.value;
-  const vendor = vendorSelect.value;
+  const select = document.getElementById('project-select') as HTMLSelectElement;
+  const projectId = select?.value;
 
-  if (!packageName || !vendor) {
-    alert('Please select a package and vendor');
+  if (!projectId) {
+    alert('Please select a project');
+    return;
+  }
+
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  // Collect form data
+  const subdomainInput = document.getElementById('subdomain-input') as HTMLInputElement;
+  const buildCommandInput = document.getElementById('build-command-input') as HTMLInputElement;
+  const outputDirInput = document.getElementById('output-dir-input') as HTMLInputElement;
+  const databaseUrlInput = document.getElementById('database-url-input') as HTMLInputElement;
+
+  const subdomain = subdomainInput?.value.trim();
+
+  if (!subdomain) {
+    alert('Please enter a subdomain');
     return;
   }
 
   // Collect environment variables
   const envVars: Record<string, string> = {};
-  const envInputs = envVarsInputs.querySelectorAll('input');
-  envInputs.forEach((input) => {
-    const inputEl = input as HTMLInputElement;
-    envVars[inputEl.name] = inputEl.value;
+  const envVarRows = document.querySelectorAll('#env-vars-container .env-var-row');
+  envVarRows.forEach((row) => {
+    const inputs = row.querySelectorAll('input');
+    const key = (inputs[0] as HTMLInputElement).value.trim();
+    const value = (inputs[1] as HTMLInputElement).value.trim();
+    if (key && value) {
+      envVars[key] = value;
+    }
   });
 
+  // Build deployment config
   const deploymentConfig = {
-    packageName,
-    vendor,
+    projectId: project.id,
+    projectName: project.name,
+    projectPath: project.path,
+    subdomain,
     envVars,
+    buildCommand: buildCommandInput?.value.trim() || undefined,
+    outputDirectory: outputDirInput?.value.trim() || undefined,
+    databaseUrl: databaseUrlInput?.value.trim() || undefined,
   };
 
   try {
-    deploymentProgress.classList.remove('hidden');
-    statusBadge.textContent = 'Deploying...';
-    statusBadge.className = 'status-badge status-deploying';
-    deploymentLogs.innerHTML = '<div class="log-entry">Starting deployment...</div>';
-    deploymentUrl.classList.add('hidden');
-
-    const response = await fetch(`${API_BASE}/api/deploy/${packageName}`, {
+    // Start deployment
+    const deployment = await api('/api/deploy', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(deploymentConfig),
     });
 
-    const result = await response.json();
+    currentDeployment = deployment;
 
-    if (result.success) {
-      currentDeployment = result.data;
-      displayDeploymentStatus(result.data);
-    } else {
-      alert(`Deployment failed: ${result.error}`);
-      statusBadge.textContent = 'Failed';
-      statusBadge.className = 'status-badge status-failed';
-    }
-  } catch (error) {
-    alert(`Error deploying: ${error}`);
-    statusBadge.textContent = 'Failed';
-    statusBadge.className = 'status-badge status-failed';
-  }
-});
+    // Show deployment status
+    showDeploymentStatus();
 
-// Display Deployment Status
-function displayDeploymentStatus(status: any) {
-  statusBadge.textContent = status.status;
-  statusBadge.className = `status-badge status-${status.status}`;
-
-  deploymentLogs.innerHTML = status.logs
-    .map((log: string) => `<div class="log-entry">${log}</div>`)
-    .join('');
-
-  if (status.deploymentUrl) {
-    deploymentUrl.classList.remove('hidden');
-    deploymentUrl.innerHTML = `
-      <strong>Deployment URL:</strong>
-      <a href="${status.deploymentUrl}" target="_blank">${status.deploymentUrl}</a>
-    `;
-  }
-
-  if (status.error) {
-    deploymentLogs.innerHTML += `<div class="log-entry" style="color: #ff6b6b;">Error: ${status.error}</div>`;
+    // Start polling for status
+    startStatusPolling(deployment.id);
+  } catch (error: any) {
+    alert(`Deployment failed: ${error.message}`);
   }
 }
 
-// Load Deployment History
+// Show deployment status
+function showDeploymentStatus() {
+  const form = document.getElementById('deploy-form');
+  const status = document.getElementById('deployment-status');
+
+  if (form) form.style.display = 'none';
+  if (status) status.style.display = 'block';
+
+  updateDeploymentStatus();
+}
+
+// Update deployment status
+function updateDeploymentStatus() {
+  if (!currentDeployment) return;
+
+  const statusBadge = document.querySelector('.status-badge');
+  const statusText = document.getElementById('status-text');
+  const statusIcon = document.querySelector('.status-icon');
+  const logsContainer = document.getElementById('logs-container');
+  const progressFill = document.querySelector('.progress-fill') as HTMLElement;
+
+  // Update status badge
+  if (statusBadge) {
+    statusBadge.className = `status-badge ${currentDeployment.status}`;
+  }
+
+  // Update status text
+  if (statusText) {
+    const statusLabels: Record<string, string> = {
+      queued: 'Queued',
+      building: 'Building',
+      ready: 'Ready',
+      error: 'Error',
+    };
+    statusText.textContent = statusLabels[currentDeployment.status] || currentDeployment.status;
+  }
+
+  // Update status icon
+  if (statusIcon) {
+    const icons: Record<string, string> = {
+      queued: '⏳',
+      building: '⚙️',
+      ready: '✅',
+      error: '❌',
+    };
+    statusIcon.textContent = icons[currentDeployment.status] || '⏳';
+  }
+
+  // Update progress bar
+  if (progressFill) {
+    const progress: Record<string, number> = {
+      queued: 10,
+      building: 50,
+      ready: 100,
+      error: 100,
+    };
+    progressFill.style.width = `${progress[currentDeployment.status] || 0}%`;
+  }
+
+  // Update logs
+  if (logsContainer) {
+    logsContainer.innerHTML = currentDeployment.logs
+      .map((log) => {
+        let className = 'log-line';
+        if (log.includes('Error') || log.includes('error')) {
+          className += ' error';
+        } else if (log.includes('success') || log.includes('complete')) {
+          className += ' success';
+        } else if (log.includes('warning') || log.includes('Warning')) {
+          className += ' warning';
+        }
+        return `<div class="${className}">${log}</div>`;
+      })
+      .join('');
+
+    // Auto-scroll to bottom
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+  }
+
+  // Show result if ready
+  if (currentDeployment.status === 'ready') {
+    const result = document.getElementById('deployment-result');
+    const deploymentUrl = document.getElementById('deployment-url') as HTMLAnchorElement;
+
+    if (result) result.style.display = 'block';
+    if (deploymentUrl) {
+      deploymentUrl.href = `https://${currentDeployment.fullDomain}`;
+      deploymentUrl.textContent = currentDeployment.fullDomain;
+    }
+
+    // Stop polling
+    stopStatusPolling();
+  }
+
+  // Stop polling on error
+  if (currentDeployment.status === 'error') {
+    stopStatusPolling();
+  }
+}
+
+// Start status polling
+function startStatusPolling(deploymentId: string) {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+  }
+
+  pollInterval = window.setInterval(async () => {
+    try {
+      const deployment = await api(`/api/deployment/${deploymentId}/status`);
+      currentDeployment = deployment;
+      updateDeploymentStatus();
+    } catch (error) {
+      console.error('Failed to poll deployment status:', error);
+    }
+  }, 2000);
+}
+
+// Stop status polling
+function stopStatusPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+}
+
+// Load deployment history
 async function loadDeploymentHistory() {
   try {
-    const response = await fetch(`${API_BASE}/api/deployments`);
-    const result = await response.json();
-
-    if (result.success) {
-      renderDeploymentHistory(result.data);
-    }
+    const deployments = await api('/api/deployments');
+    renderDeploymentHistory(deployments);
   } catch (error) {
-    console.error('Error loading deployment history:', error);
+    console.error('Failed to load deployment history:', error);
   }
 }
 
-// Render Deployment History
-function renderDeploymentHistory(deployments: any[]) {
+// Render deployment history
+function renderDeploymentHistory(deployments: Deployment[]) {
+  const historyList = document.getElementById('history-list');
+  if (!historyList) return;
+
   if (deployments.length === 0) {
-    historyList.innerHTML = '<p class="placeholder">No deployments yet</p>';
+    historyList.innerHTML = `
+      <div class="placeholder">
+        <div class="placeholder-icon">📜</div>
+        <p>No deployments yet</p>
+      </div>
+    `;
     return;
   }
 
   historyList.innerHTML = deployments
     .map(
       (deployment) => `
-    <div class="history-item">
-      <div class="history-header">
-        <div>
-          <strong>${deployment.packageName}</strong> on <strong>${deployment.vendor}</strong>
+      <div class="history-item">
+        <div class="history-header">
+          <div class="history-project-name">${deployment.projectName}</div>
+          <div class="status-badge ${deployment.status}">
+            ${deployment.status}
+          </div>
         </div>
-        <span class="status-badge status-${deployment.status}">${deployment.status}</span>
+        <div class="history-info">
+          <div class="history-info-item">
+            <div class="info-label">Domain</div>
+            <div class="info-value">
+              <a href="https://${deployment.fullDomain}" target="_blank">${deployment.fullDomain}</a>
+            </div>
+          </div>
+          <div class="history-info-item">
+            <div class="info-label">Started</div>
+            <div class="info-value">${new Date(deployment.startedAt).toLocaleString()}</div>
+          </div>
+          ${
+            deployment.completedAt
+              ? `
+          <div class="history-info-item">
+            <div class="info-label">Completed</div>
+            <div class="info-value">${new Date(deployment.completedAt).toLocaleString()}</div>
+          </div>
+          `
+              : ''
+          }
+        </div>
       </div>
-      <div class="timestamp">
-        ${new Date(deployment.startedAt).toLocaleString()}
-      </div>
-      ${deployment.deploymentUrl ? `<div><a href="${deployment.deploymentUrl}" target="_blank">${deployment.deploymentUrl}</a></div>` : ''}
-    </div>
-  `
+    `
     )
     .join('');
 }
 
-// Initialize app on page load
-initialize();
+// Initialize on load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}

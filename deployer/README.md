@@ -1,271 +1,238 @@
-# Monorepo Deployer
+# Vercel Deployer
 
-A local web application that automates deployment for your monorepo packages. Detects package types, analyzes deployment needs, and provides a simple UI to deploy to popular hosting providers.
+A futuristic dark-themed web application for deploying projects to Vercel with custom subdomain configuration on **vinguler.com**.
 
 ## Features
 
-- **Automatic Package Detection**: Scans your monorepo and identifies frontend, backend, and full-stack packages
-- **Smart Analysis**: Detects build tools (Vite, webpack, tsc), frameworks (Vue, React, Express), and dependencies
-- **Deployment Planning**: Generates vendor recommendations with cost estimates
-- **Multiple Vendor Support**: Deploy to Vercel, Railway, Netlify, Render, and more
-- **Web UI**: Clean, intuitive interface for managing deployments
-- **Environment Management**: Handles environment variables for each deployment
-- **Deployment History**: Track all deployments and their status
+- 🔍 **Project Scanning** - Automatically detect Node.js projects in a directory
+- 📊 **Project Analysis** - Detect project type, framework, build tools, and database usage
+- 🗄️ **Database Detection** - Automatically identifies Prisma, PostgreSQL, MySQL, MongoDB, and SQLite
+- 🚀 **One-Click Deployment** - Deploy to Vercel with custom subdomain (\*.vinguler.com)
+- 🔐 **Encrypted Secrets** - Store database connection strings as encrypted Vercel secrets
+- ⚙️ **Environment Variables** - Configure environment variables for your deployments
+- 📈 **Deployment Tracking** - Real-time deployment status and logs
+- 📜 **Deployment History** - View all past deployments
+- 🎨 **Futuristic UI** - Dark theme with glowing accents and smooth animations
 
-## Quick Start
+## Tech Stack
 
-### 1. Install Dependencies
+**Backend:**
 
-```bash
-cd deployer/app
-npm install
+- TypeScript
+- Express.js
+- Vercel API
+- JSON file persistence
+
+**Frontend:**
+
+- Plain HTML/CSS/TypeScript
+- Futuristic dark theme
+- Responsive design
+
+## Prerequisites
+
+- Node.js (v18 or higher)
+- Vercel account
+- Vercel API token
+- Custom domain configured in Vercel (vinguler.com)
+
+## Setup
+
+1. **Install dependencies:**
+
+   ```bash
+   cd deployer/app
+   npm install
+   ```
+
+2. **Configure environment variables:**
+
+   Create a `.env` file in `deployer/app/`:
+
+   ```env
+   PORT=3000
+   VERCEL_TOKEN=your_vercel_token_here
+   VERCEL_TEAM_ID=your_team_id_here
+   VERCEL_DOMAIN=vinguler.com
+   ```
+
+3. **Build the project:**
+
+   ```bash
+   npm run build
+   ```
+
+4. **Start the server:**
+
+   ```bash
+   npm start
+   ```
+
+   The deployer will be available at [http://localhost:3000](http://localhost:3000)
+
+## Usage
+
+### 1. Scan for Projects
+
+- Click "Scan Directory" button
+- Enter the path to your projects directory
+- The scanner will detect all Node.js projects and analyze them
+
+### 2. Deploy a Project
+
+- Go to the "Deploy" tab
+- Select a project from the dropdown
+- Configure your deployment:
+  - **Subdomain**: Choose a subdomain (e.g., `my-app` → `my-app.vinguler.com`)
+  - **Build Configuration**: Optional build command and output directory
+  - **Environment Variables**: Add any environment variables your project needs
+  - **Database**: If a database is detected, optionally provide a connection string (stored encrypted)
+
+- Click "Deploy to Vercel"
+- Watch real-time deployment progress and logs
+
+### 3. View Deployment History
+
+- Go to the "History" tab to see all past deployments
+- View deployment status, domains, and timestamps
+
+## Project Structure
+
+```
+deployer/
+├── README.md                    # This file
+└── app/
+    ├── package.json             # Node.js dependencies
+    ├── tsconfig.json            # TypeScript configuration
+    ├── .env                     # Environment variables (gitignored)
+    ├── .env.example             # Environment template
+    │
+    ├── src/                     # Source code
+    │   ├── server/              # Backend server
+    │   │   ├── index.ts         # Express server entry point
+    │   │   └── routes.ts        # API routes
+    │   │
+    │   ├── client/              # Frontend application
+    │   │   ├── index.html       # Main HTML page
+    │   │   ├── app.ts           # Client-side TypeScript
+    │   │   └── styles.css       # Futuristic dark theme CSS
+    │   │
+    │   ├── services/            # Business logic
+    │   │   ├── scanner.ts       # Project scanner
+    │   │   ├── analyzer.ts      # Project analyzer
+    │   │   ├── vercel.ts        # Vercel API client
+    │   │   ├── executor.ts      # Deployment orchestrator
+    │   │   └── data.ts          # Data persistence (JSON)
+    │   │
+    │   ├── types/               # TypeScript types
+    │   │   └── index.ts         # Shared type definitions
+    │   │
+    │   └── utils/               # Utilities
+    │       ├── logger.ts        # Logging utility
+    │       └── validator.ts     # Input validation
+    │
+    ├── data/                    # Runtime data storage
+    │   ├── projects.json        # Project records
+    │   └── deployments.json     # Deployment history
+    │
+    └── dist/                    # Compiled JavaScript (gitignored)
 ```
 
-### 2. Configure Environment Variables
+## API Endpoints
 
-Copy the example environment file and fill in your API keys:
+- `POST /api/scan` - Scan a directory for projects
+- `GET /api/projects` - Get all scanned projects
+- `GET /api/projects/:id` - Get a specific project
+- `POST /api/deploy` - Deploy a project
+- `GET /api/deployment/:id/status` - Get deployment status
+- `GET /api/deployment/:id/logs` - Get deployment logs
+- `GET /api/deployments` - Get all deployments
+- `GET /api/subdomain/check/:subdomain` - Check subdomain availability
+- `GET /api/vercel/connection` - Test Vercel API connection
 
-```bash
-cp .env.example .env
-```
+## Development
 
-Edit `.env` and add your vendor API tokens (see [Configuration](#configuration) below).
-
-### 3. Start the Deployer
+**Development mode with auto-reload:**
 
 ```bash
 npm run dev
 ```
 
-Or from the repository root:
-
-```bash
-npm run deployer
-```
-
-### 4. Open in Browser
-
-Navigate to [http://localhost:3000](http://localhost:3000)
-
-## How to Use
-
-### 1. Scan Your Repository
-
-Click the **"Scan Repository"** button on the Dashboard tab. The deployer will:
-
-- Detect all packages in your `/packages` directory
-- Analyze each package's type, framework, and build configuration
-- Generate deployment recommendations
-
-### 2. Review Deployment Plans
-
-Switch to the **"Deployment Plan"** tab to see:
-
-- Recommended vendors for each package
-- Cost estimates
-- Required build commands
-- Environment variables needed
-
-### 3. Deploy a Package
-
-Go to the **"Deploy"** tab:
-
-1. Select a package from the dropdown
-2. Choose a vendor (recommended options are highlighted)
-3. Enter required environment variables
-4. Click **"Deploy"**
-
-Watch the deployment progress in real-time with live logs.
-
-### 4. View History
-
-Check the **"History"** tab to see all past deployments and their status.
-
-## Configuration
-
-### Vercel
-
-1. Get your token: [https://vercel.com/account/tokens](https://vercel.com/account/tokens)
-2. Create a new token with deployment permissions
-3. Add to `.env`:
-   ```
-   VERCEL_TOKEN=your_token_here
-   VERCEL_ORG_ID=your_org_id
-   VERCEL_PROJECT_ID=your_project_id
-   ```
-
-### Railway
-
-1. Get your token: [https://railway.app/account/tokens](https://railway.app/account/tokens)
-2. Add to `.env`:
-   ```
-   RAILWAY_TOKEN=your_token_here
-   ```
-
-### Netlify
-
-1. Get your token: [https://app.netlify.com/user/applications](https://app.netlify.com/user/applications)
-2. Create a personal access token
-3. Add to `.env`:
-   ```
-   NETLIFY_AUTH_TOKEN=your_token_here
-   NETLIFY_SITE_ID=your_site_id
-   ```
-
-### Render
-
-1. Get your API key: [https://dashboard.render.com/account/api-keys](https://dashboard.render.com/account/api-keys)
-2. Add to `.env`:
-   ```
-   RENDER_API_KEY=your_api_key_here
-   ```
-
-## Architecture
-
-```
-/deployer
-  /app
-    /src
-      /server          # Express backend
-        index.ts       # Server entry point
-        routes.ts      # API endpoints
-      /client          # Frontend
-        index.html     # Main UI
-        app.ts         # Frontend logic
-        styles.css     # Styling
-      /services        # Core business logic
-        scanner.ts     # Package detection
-        analyzer.ts    # Package analysis
-        planner.ts     # Deployment planning
-        executor.ts    # Deployment execution
-        /vendors       # Vendor adapters
-          vercel.ts
-          railway.ts
-          netlify.ts
-          render.ts
-      /types           # TypeScript types
-      /utils           # Utilities
-        logger.ts
-        validator.ts
-```
-
-## API Endpoints
-
-- `GET /api/scan` - Scan packages and return analysis
-- `GET /api/packages` - Get detected packages
-- `GET /api/deployment-plan` - Get generated deployment plans
-- `POST /api/deploy/:packageName` - Execute deployment
-- `GET /api/deployment-status/:id` - Check deployment status
-- `GET /api/deployments` - Get all deployments
-
-## Package Detection
-
-The deployer automatically detects:
-
-- **Package Type**: Frontend, backend, or full-stack
-- **Framework**: Vue, React, Svelte, Express, Fastify, NestJS
-- **Build Tool**: Vite, webpack, TypeScript, esbuild, rollup
-- **Node Version**: From `engines.node` in package.json
-- **Database**: PostgreSQL, MySQL, MongoDB, SQLite, Prisma
-- **Environment Variables**: By scanning source code
-
-## Vendor Recommendations
-
-### Frontend Packages (Vite/Vue)
-
-- **Vercel** (Recommended): Zero-config deployment, global CDN, $0-20/month
-- **Netlify**: Continuous deployment, forms handling, $0-19/month
-- **Cloudflare Pages**: Unlimited bandwidth, Workers support, $0/month
-
-### Backend Packages (Express/Node)
-
-- **Railway** (Recommended): Simple deployment, built-in databases, $5-20/month
-- **Render**: Free tier available, managed databases, $0-7/month
-- **Fly.io**: Global distribution, Dockerfile support, $0-10/month
-
-## Development
-
-### Build for Production
-
-```bash
-npm run build
-```
-
-### Type Check
+**Type checking:**
 
 ```bash
 npm run type-check
 ```
 
-### Start Production Server
+**Build:**
 
 ```bash
-npm start
+npm run build
 ```
 
-## Extending the Deployer
+## Features in Detail
 
-### Adding a New Vendor
+### Project Analysis
 
-1. Create a new adapter in `/src/services/vendors/`:
+The analyzer automatically detects:
 
-```typescript
-import type { VendorAdapter, DeploymentConfig, DeploymentStatus } from '../../types/index.js';
+- **Project Type**: frontend, backend, or fullstack
+- **Framework**: Vue, React, Next.js, Nuxt, Express, Fastify, NestJS, etc.
+- **Build Tool**: Vite, Webpack, esbuild, Rollup, tsc
+- **Database**: Prisma, PostgreSQL, MySQL, MongoDB, SQLite
+- **Environment Variables**: Scans source code for `process.env.*` references
 
-export class MyVendorAdapter implements VendorAdapter {
-  name = 'my-vendor' as const;
+### Deployment Workflow
 
-  getRequiredEnvVars(): string[] {
-    return ['MY_VENDOR_TOKEN'];
-  }
+1. **Scan** - Detects projects and analyzes them
+2. **Configure** - User selects project and configures subdomain, env vars, etc.
+3. **Deploy** - Creates/updates Vercel project
+4. **Environment Setup** - Sets environment variables (DATABASE_URL encrypted)
+5. **Domain Configuration** - Adds custom subdomain (\*.vinguler.com)
+6. **Verification** - Verifies domain configuration
+7. **Complete** - Deployment is ready and accessible
 
-  async validate(config: DeploymentConfig): Promise<boolean> {
-    // Validation logic
-    return true;
-  }
+### Security
 
-  async deploy(config: DeploymentConfig): Promise<DeploymentStatus> {
-    // Deployment logic
-  }
-}
-```
+- Database connection strings are stored as **encrypted** Vercel secrets
+- API token is stored in `.env` file (gitignored)
+- Input validation on all user inputs
+- Subdomain validation to prevent invalid domains
 
-2. Register in `/src/services/executor.ts`
-3. Add to planner recommendations in `/src/services/planner.ts`
+## Futuristic UI Theme
+
+The UI features a **dark futuristic theme** with:
+
+- Deep space blue backgrounds (#0a0e1a)
+- Electric blue, neon green, deep purple, and yellow accents
+- Glowing borders and hover effects
+- Smooth animations and transitions
+- Terminal-inspired monospace fonts for logs
+- Pulsing animations for loading states
+- Gradient buttons with glow effects
 
 ## Troubleshooting
 
-### Packages Not Detected
+**Server won't start:**
 
-- Ensure packages are in the `/packages` directory
-- Check that each package has a valid `package.json`
+- Check that `.env` file exists with correct values
+- Ensure port 3000 is not in use
 
-### Deployment Fails
+**Vercel connection failed:**
 
-- Verify environment variables are set correctly
-- Check vendor API token has proper permissions
-- Review deployment logs for specific errors
+- Verify your Vercel token is valid
+- Check team ID and domain are correct
 
-### Build Errors
+**Deployment fails:**
 
-- Ensure TypeScript is installed: `npm install`
-- Run type check: `npm run type-check`
-
-## Security Notes
-
-- The `.env` file is gitignored by default
-- Never commit API tokens or secrets to version control
-- Use environment-specific tokens for production deployments
-- Review vendor permissions before deploying
+- Check deployment logs for specific errors
+- Verify your project has valid `package.json`
+- Ensure build command and output directory are correct
 
 ## License
 
-ISC
+MIT
 
-## Support
+## Author
 
-For issues or questions about this deployer, check:
-
-- The deployment logs in the UI
-- The console output from the dev server
-- Vendor-specific documentation for API usage
+Built with ❤️ for vinguler.com deployments

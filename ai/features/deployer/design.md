@@ -1,8 +1,15 @@
-# Deployer Design Document
+# Deployer Design & Implementation Plan
 
 ## System Overview
 
-The Deployer is a production deployment management tool for monorepo packages. It provides package analysis, vendor selection, deployment execution, and statistics tracking through a local web interface.
+The Deployer is a Vercel-focused deployment tool that streamlines deploying projects to Vercel with custom subdomain configuration on `vinguler.com`. It automatically detects database usage and manages connection strings as Vercel secrets.
+
+**Key Differentiators:**
+
+- Vercel-only (no multi-vendor complexity)
+- Custom subdomain configuration (`{subdomain}.vinguler.com`)
+- Automatic database detection and connection string management
+- Simple, deterministic deployment workflow
 
 ---
 
@@ -23,108 +30,90 @@ The Deployer is a production deployment management tool for monorepo packages. I
       │          │         │          │
       ▼          ▼         ▼          ▼
 ┌─────────┐ ┌─────────┐ ┌────────┐ ┌──────────┐
-│ Scanner │ │Analyzer │ │Planner │ │ Executor │
+│ Scanner │ │Analyzer │ │ Vercel │ │ Executor │
+│         │ │         │ │Service │ │          │
 └─────────┘ └─────────┘ └────────┘ └────┬─────┘
-                                         │
-                           ┌─────────────▼──────────────┐
-                           │   Vendor Adapters          │
-                           │  (Vercel, Railway, etc.)   │
-                           └────────────────────────────┘
+                            │             │
+                            │             │
+                    ┌───────▼─────────────▼──────┐
+                    │     Vercel API             │
+                    │  - Deployments             │
+                    │  - Projects                │
+                    │  - Domains                 │
+                    │  - Environment Variables   │
+                    └────────────────────────────┘
       ┌─────────────────────────────┐
       │      Data Service           │
       │   (JSON Persistence)        │
       └──────┬──────────────────────┘
              │
       ┌──────▼──────┐  ┌──────────────┐
-      │packages.json│  │deployments.json│
+      │projects.json│  │deployments.json│
       └─────────────┘  └──────────────┘
 ```
 
 ### Component Responsibilities
 
-1. **Scanner** - Discovers packages in `/packages` directory
-2. **Analyzer** - Classifies packages (type, framework, dependencies)
-3. **Planner** - Generates deployment recommendations with vendor options
-4. **Executor** - Orchestrates deployments via vendor adapters
-5. **Vendor Adapters** - Interface with specific hosting platforms
-6. **Data Service** - Persists packages and deployment records
+1. **Scanner** - Discovers projects in working directory
+2. **Analyzer** - Classifies projects, detects database usage
+3. **Vercel Service** - Handles all Vercel API interactions (deployments, domains, secrets)
+4. **Executor** - Orchestrates deployment workflow
+5. **Data Service** - Persists projects and deployment records locally
 
 ---
 
 ## Data Models
 
-### Package Information
+### Project Information
 
 ```typescript
-interface PackageInfo {
-  name: string; // Package name
-  path: string; // Relative path in monorepo
-  type: PackageType; // frontend | backend | fullstack
-  framework: Framework; // vue | react | express | etc.
-  buildTool: BuildTool; // vite | webpack | tsc | etc.
+interface ProjectInfo {
+  name: string; // Project name
+  path: string; // Absolute path to project
+  type: ProjectType; // frontend | backend | fullstack
+  framework?: Framework; // vue | react | express | next | etc.
+  buildTool?: BuildTool; // vite | webpack | tsc | next | etc.
   nodeVersion?: string; // Required Node version
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
   scripts: Record<string, string>;
   hasDatabase: boolean; // Database dependency detected
-  databaseType?: string; // postgres | mysql | mongodb | etc.
-  requiredEnvVars: string[]; // Detected env var requirements
+  databaseType?: DatabaseType; // postgres | mysql | mongodb | prisma
+  detectedEnvVars: string[]; // Detected env var requirements
 }
+
+type ProjectType = 'frontend' | 'backend' | 'fullstack';
+type Framework = 'vue' | 'react' | 'next' | 'express' | 'fastify' | 'nest' | 'nuxt' | 'svelte';
+type BuildTool = 'vite' | 'webpack' | 'tsc' | 'next' | 'esbuild' | 'rollup';
+type DatabaseType = 'postgres' | 'mysql' | 'mongodb' | 'prisma' | 'sqlite';
 ```
 
-### Saved Package (Persisted)
+### Saved Project (Persisted)
 
 ```typescript
-interface SavedPackage extends PackageInfo {
-  id: string; // Unique identifier
+interface SavedProject extends ProjectInfo {
+  id: string; // Unique identifier (UUID)
   scannedAt: string; // ISO timestamp of last scan
   lastDeployedAt?: string; // ISO timestamp of last deployment
-  deploymentCount: number; // Total deployments for this package
+  deploymentCount: number; // Total deployments for this project
+  vercelProjectId?: string; // Vercel project ID (if deployed)
+  currentDomain?: string; // Current custom domain (e.g., myapp.vinguler.com)
 }
 ```
 
-### Deployment Options
-
-```typescript
-interface DeploymentOption {
-  vendor: VendorName; // vercel | railway | etc.
-  vendorDisplayName: string; // Human-readable name
-  recommended: boolean; // Is this the recommended option?
-  estimatedCost: {
-    min: number; // Minimum monthly cost
-    max: number; // Maximum monthly cost
-    currency: string; // USD
-    period: string; // month
-  };
-  features: string[]; // List of key features
-  limitations?: string[]; // Known limitations
-}
-```
-
-### Deployment Plan
-
-```typescript
-interface DeploymentPlan {
-  packageName: string;
-  packageType: PackageType;
-  deploymentOptions: DeploymentOption[]; // Multiple vendor choices
-  buildCommand?: string; // Recommended build command
-  outputDirectory?: string; // Build output directory
-  envVarsRequired: string[]; // Required env vars
-  notes: string[]; // Important notes for user
-}
-```
-
-### Deployment Configuration (User-Selected)
+### Deployment Configuration (User Input)
 
 ```typescript
 interface DeploymentConfig {
-  packageName: string;
-  vendor: VendorName; // User-selected vendor
+  projectId: string; // Local project ID
+  projectName: string; // Project name
+  projectPath: string; // Path to project
+  subdomain: string; // Subdomain prefix (e.g., "myapp")
   envVars: Record<string, string>; // User-provided env vars
-  buildCommand?: string; // Custom build command
-  outputDirectory?: string; // Custom output directory
-  customConfig?: Record<string, any>; // Vendor-specific config
+  databaseUrl?: string; // Database connection string (if hasDatabase)
+  buildCommand?: string; // Custom build command (optional)
+  outputDirectory?: string; // Custom output directory (optional)
+  installCommand?: string; // Custom install command (optional)
 }
 ```
 
@@ -132,17 +121,56 @@ interface DeploymentConfig {
 
 ```typescript
 interface DeploymentRecord {
-  id: string; // Unique deployment ID
-  packageId: string; // Foreign key to SavedPackage
-  packageName: string; // Denormalized for querying
-  vendor: VendorName; // Vendor used
-  status: DeploymentStatus; // pending | building | deploying | success | failed
+  id: string; // Unique deployment ID (UUID)
+  projectId: string; // Foreign key to SavedProject
+  projectName: string; // Denormalized for querying
+  status: DeploymentStatus; // queued | building | ready | error | canceled
+  subdomain: string; // Deployed subdomain
+  fullDomain: string; // Full domain (e.g., myapp.vinguler.com)
   startedAt: string; // ISO timestamp
   completedAt?: string; // ISO timestamp (if completed)
   logs: string[]; // Deployment logs
   error?: string; // Error message (if failed)
-  deploymentUrl?: string; // Live deployment URL
-  envVars?: string[]; // Env var keys only (no values)
+  vercelDeploymentId?: string; // Vercel deployment ID
+  vercelDeploymentUrl?: string; // Vercel deployment URL
+  customDomainConfigured: boolean; // Whether custom domain was set
+  envVarsSet: string[]; // Env var keys (no values)
+  hasDatabase: boolean; // Whether DATABASE_URL was configured
+}
+
+type DeploymentStatus = 'queued' | 'building' | 'ready' | 'error' | 'canceled';
+```
+
+### Vercel API Response Types
+
+```typescript
+// Vercel Deployment Response
+interface VercelDeployment {
+  id: string;
+  url: string; // vercel.app URL
+  state: 'BUILDING' | 'READY' | 'ERROR' | 'CANCELED';
+  readyState: 'QUEUED' | 'BUILDING' | 'READY' | 'ERROR' | 'CANCELED';
+  createdAt: number;
+  buildingAt?: number;
+  ready?: number;
+  target?: string; // production | preview
+}
+
+// Vercel Project Response
+interface VercelProject {
+  id: string;
+  name: string;
+  framework?: string;
+  devCommand?: string;
+  buildCommand?: string;
+  outputDirectory?: string;
+}
+
+// Vercel Domain Response
+interface VercelDomain {
+  name: string;
+  verified: boolean;
+  verification?: any[];
 }
 ```
 
@@ -150,11 +178,15 @@ interface DeploymentRecord {
 
 ## API Endpoints
 
-### Package Management
+### Project Management
 
 #### `GET /api/scan`
 
-Scans the monorepo, analyzes packages, and saves to disk.
+Scans the working directory, analyzes projects, and saves to disk.
+
+**Query Parameters:**
+
+- `path` (optional): Path to scan (defaults to current directory)
 
 **Response:**
 
@@ -162,16 +194,15 @@ Scans the monorepo, analyzes packages, and saves to disk.
 {
   "success": true,
   "data": {
-    "packages": SavedPackage[],
-    "scannedAt": "2024-01-15T10:30:00Z",
-    "repositoryRoot": "/path/to/repo"
+    "projects": SavedProject[],
+    "scannedAt": "2024-01-15T10:30:00Z"
   }
 }
 ```
 
-#### `GET /api/packages`
+#### `GET /api/projects`
 
-Retrieves all saved packages with deployment stats.
+Retrieves all saved projects with deployment stats.
 
 **Response:**
 
@@ -180,67 +211,52 @@ Retrieves all saved packages with deployment stats.
   "success": true,
   "data": [
     {
-      ...SavedPackage,
+      ...SavedProject,
       "latestDeployment": {
-        "vendor": "vercel",
-        "status": "success",
+        "status": "ready",
         "deployedAt": "2024-01-15T10:30:00Z",
-        "deploymentUrl": "https://app.vercel.app"
+        "domain": "myapp.vinguler.com"
       }
     }
   ]
 }
 ```
 
-### Deployment Planning
+#### `GET /api/projects/:id`
 
-#### `GET /api/deployment-plan`
-
-Generates deployment plans for all packages.
+Retrieves a specific project by ID.
 
 **Response:**
 
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "packageName": "client",
-      "packageType": "frontend",
-      "deploymentOptions": [
-        {
-          "vendor": "vercel",
-          "vendorDisplayName": "Vercel",
-          "recommended": true,
-          "estimatedCost": { "min": 0, "max": 20, "currency": "USD", "period": "month" },
-          "features": ["Edge Functions", "Auto-scaling", "Global CDN"],
-          "limitations": []
-        }
-      ],
-      "buildCommand": "npm run build",
-      "outputDirectory": "dist",
-      "envVarsRequired": ["VITE_API_URL"],
-      "notes": ["Optimized for Vite projects"]
-    }
-  ]
+  "data": {
+    ...SavedProject,
+    "deploymentHistory": DeploymentRecord[]
+  }
 }
 ```
 
 ### Deployment Execution
 
-#### `POST /api/deploy/:packageName`
+#### `POST /api/deploy`
 
-Executes a deployment for the specified package.
+Executes a deployment to Vercel.
 
 **Request Body:**
 
 ```json
 {
-  "packageName": "client",
-  "vendor": "vercel",
+  "projectId": "uuid-here",
+  "projectName": "my-app",
+  "projectPath": "/path/to/project",
+  "subdomain": "myapp",
   "envVars": {
-    "VITE_API_URL": "https://api.example.com"
+    "API_URL": "https://api.example.com",
+    "NODE_ENV": "production"
   },
+  "databaseUrl": "postgresql://user:pass@host:5432/db",
   "buildCommand": "npm run build",
   "outputDirectory": "dist"
 }
@@ -252,17 +268,18 @@ Executes a deployment for the specified package.
 {
   "success": true,
   "data": {
-    "id": "1234567890-abc123",
-    "packageName": "client",
-    "vendor": "vercel",
-    "status": "pending",
+    "id": "deployment-uuid",
+    "projectId": "project-uuid",
+    "status": "queued",
+    "subdomain": "myapp",
+    "fullDomain": "myapp.vinguler.com",
     "startedAt": "2024-01-15T10:30:00Z",
-    "logs": ["Starting deployment..."]
+    "logs": ["Initializing deployment..."]
   }
 }
 ```
 
-#### `GET /api/deployment-status/:id`
+#### `GET /api/deployment/:id/status`
 
 Checks the status of a specific deployment.
 
@@ -272,11 +289,34 @@ Checks the status of a specific deployment.
 {
   "success": true,
   "data": {
-    "id": "1234567890-abc123",
-    "status": "success",
+    "id": "deployment-uuid",
+    "status": "ready",
     "completedAt": "2024-01-15T10:35:00Z",
-    "deploymentUrl": "https://app.vercel.app",
-    "logs": [...]
+    "vercelDeploymentUrl": "https://myapp-xyz.vercel.app",
+    "customDomain": "myapp.vinguler.com",
+    "logs": ["...", "Deployment ready!"]
+  }
+}
+```
+
+#### `GET /api/deployment/:id/logs`
+
+Retrieves deployment logs.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "logs": [
+      "Starting deployment...",
+      "Installing dependencies...",
+      "Building project...",
+      "Deploying to Vercel...",
+      "Configuring custom domain...",
+      "Deployment complete!"
+    ]
   }
 }
 ```
@@ -285,7 +325,12 @@ Checks the status of a specific deployment.
 
 #### `GET /api/deployments`
 
-Retrieves all deployment records, sorted by most recent first.
+Retrieves all deployment records.
+
+**Query Parameters:**
+
+- `projectId` (optional): Filter by project ID
+- `limit` (optional): Limit results (default 50)
 
 **Response:**
 
@@ -294,15 +339,51 @@ Retrieves all deployment records, sorted by most recent first.
   "success": true,
   "data": [
     {
-      "id": "1234567890-abc123",
-      "packageName": "client",
-      "vendor": "vercel",
-      "status": "success",
+      "id": "deployment-uuid",
+      "projectName": "my-app",
+      "status": "ready",
+      "subdomain": "myapp",
+      "fullDomain": "myapp.vinguler.com",
       "startedAt": "2024-01-15T10:30:00Z",
-      "completedAt": "2024-01-15T10:35:00Z",
-      "deploymentUrl": "https://app.vercel.app"
+      "completedAt": "2024-01-15T10:35:00Z"
     }
   ]
+}
+```
+
+### Utility Endpoints
+
+#### `GET /api/subdomain/check/:subdomain`
+
+Checks if a subdomain is available.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "subdomain": "myapp",
+    "available": true,
+    "fullDomain": "myapp.vinguler.com"
+  }
+}
+```
+
+#### `GET /api/vercel/connection`
+
+Tests Vercel API connection.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "connected": true,
+    "teamId": "team_xxx",
+    "domain": "vinguler.com"
+  }
 }
 ```
 
@@ -312,287 +393,947 @@ Retrieves all deployment records, sorted by most recent first.
 
 ### Scanner Service
 
-**Purpose:** Discover packages in the monorepo
+**File:** `src/services/scanner.ts`
+
+**Purpose:** Discover projects in the working directory
 
 **Methods:**
 
-- `scan(): Promise<ScanResult>` - Scans `/packages` directory and returns basic package info
+```typescript
+class ScannerService {
+  async scanDirectory(path: string): Promise<ProjectInfo[]> {
+    // 1. Read directory
+    // 2. Look for package.json files
+    // 3. Parse package.json for each project
+    // 4. Extract basic metadata
+    // 5. Return array of ProjectInfo
+  }
 
-**Logic:**
+  private hasPackageJson(path: string): boolean {
+    // Check if package.json exists
+  }
 
-1. Read `/packages` directory
-2. For each subdirectory, check if `package.json` exists
-3. Parse `package.json` and extract metadata
-4. Return array of packages with basic info
+  private parsePackageJson(path: string): Partial<ProjectInfo> {
+    // Parse package.json and extract:
+    // - name, scripts, dependencies, devDependencies
+  }
+}
+```
+
+**Implementation Notes:**
+
+- Use Node.js `fs` module for file system operations
+- Handle errors gracefully (skip invalid projects)
+- Support both single projects and monorepo structures
+
+---
 
 ### Analyzer Service
 
-**Purpose:** Classify packages and extract detailed metadata
+**File:** `src/services/analyzer.ts`
+
+**Purpose:** Classify projects and detect database usage
 
 **Methods:**
 
-- `analyze(packageInfo: PackageInfo): Promise<PackageInfo>` - Enhances package info with classification
+```typescript
+class AnalyzerService {
+  analyze(projectInfo: Partial<ProjectInfo>): ProjectInfo {
+    // 1. Detect project type (frontend/backend/fullstack)
+    // 2. Identify framework
+    // 3. Detect build tool
+    // 4. Check for database dependencies
+    // 5. Extract environment variables from code
+    // 6. Return enriched ProjectInfo
+  }
 
-**Logic:**
+  private detectProjectType(deps: Record<string, string>): ProjectType {
+    // Check dependencies for frontend/backend indicators
+  }
 
-1. Detect package type (frontend/backend/fullstack) by analyzing dependencies
-2. Identify framework (Vue, React, Express, etc.)
-3. Detect build tool (Vite, webpack, TypeScript, etc.)
-4. Parse scripts to find build commands
-5. Detect database dependencies
-6. Extract required environment variables (heuristic-based)
-7. Return enriched package info
+  private detectFramework(deps: Record<string, string>): Framework | undefined {
+    // Identify framework: vue, react, next, express, etc.
+  }
+
+  private detectBuildTool(
+    deps: Record<string, string>,
+    scripts: Record<string, string>
+  ): BuildTool | undefined {
+    // Identify build tool: vite, webpack, next, etc.
+  }
+
+  private detectDatabase(deps: Record<string, string>): {
+    hasDatabase: boolean;
+    databaseType?: DatabaseType;
+  } {
+    // Check for database-related packages:
+    // - pg, pg-promise -> postgres
+    // - mysql2, mysql -> mysql
+    // - mongodb, mongoose -> mongodb
+    // - @prisma/client, prisma -> prisma
+    // - better-sqlite3 -> sqlite
+  }
+
+  private extractEnvVars(projectPath: string): string[] {
+    // Heuristic: scan for process.env.VAR_NAME
+    // Look in common files: .env.example, config files
+  }
+}
+```
 
 **Classification Rules:**
 
-- **Frontend:** Has `vite`, `react`, `vue`, `svelte`, etc. in dependencies
-- **Backend:** Has `express`, `fastify`, `nest`, etc. in dependencies
-- **Fullstack:** Has both frontend and backend indicators
-- **Database:** Detects `pg`, `mysql2`, `mongodb`, `prisma`, `drizzle`, etc.
+| Dependency                  | Type      | Framework | Database |
+| --------------------------- | --------- | --------- | -------- |
+| `vue`, `@vitejs/plugin-vue` | frontend  | vue       | -        |
+| `react`, `react-dom`        | frontend  | react     | -        |
+| `next`                      | fullstack | next      | -        |
+| `express`                   | backend   | express   | -        |
+| `@nestjs/core`              | backend   | nest      | -        |
+| `pg`, `pg-promise`          | -         | -         | postgres |
+| `mysql2`                    | -         | -         | mysql    |
+| `mongodb`, `mongoose`       | -         | -         | mongodb  |
+| `@prisma/client`            | -         | -         | prisma   |
 
-### Planner Service
+---
 
-**Purpose:** Generate deployment recommendations
+### Vercel Service
+
+**File:** `src/services/vercel.ts`
+
+**Purpose:** Handle all Vercel API interactions
 
 **Methods:**
 
-- `generatePlan(packageInfo: PackageInfo): DeploymentPlan` - Creates deployment plan with vendor options
+```typescript
+class VercelService {
+  private token: string;
+  private teamId: string;
+  private domain: string;
 
-**Logic:**
+  constructor(token: string, teamId: string, domain: string) {
+    this.token = token;
+    this.teamId = teamId;
+    this.domain = domain;
+  }
 
-1. Based on package type, suggest appropriate vendors
-2. For each vendor, provide:
-   - Cost estimates (hardcoded ranges)
-   - Feature list
-   - Limitations (if any)
-3. Mark recommended vendor (opinionated defaults)
-4. Extract build command and output directory from package.json scripts
-5. List required environment variables
-6. Add helpful notes
+  // Project Management
+  async createProject(name: string, framework?: string): Promise<VercelProject> {
+    // POST /v9/projects
+    // Creates a new Vercel project
+  }
 
-**Vendor Recommendations:**
+  async getProject(nameOrId: string): Promise<VercelProject | null> {
+    // GET /v9/projects/:id
+    // Retrieves project by name or ID
+  }
 
-- **Frontend:** Vercel (recommended), Netlify, Cloudflare Pages
-- **Backend:** Railway (recommended), Render, Fly.io
+  // Deployment
+  async deploy(config: {
+    projectName: string;
+    projectPath: string;
+    envVars?: Record<string, string>;
+    buildCommand?: string;
+    outputDirectory?: string;
+  }): Promise<VercelDeployment> {
+    // Creates deployment using Vercel CLI or API
+    // 1. Create project if doesn't exist
+    // 2. Set environment variables
+    // 3. Trigger deployment
+    // 4. Return deployment info
+  }
+
+  async getDeploymentStatus(deploymentId: string): Promise<VercelDeployment> {
+    // GET /v13/deployments/:id
+    // Retrieves deployment status
+  }
+
+  async getDeploymentLogs(deploymentId: string): Promise<string[]> {
+    // GET /v2/deployments/:id/events
+    // Retrieves deployment logs
+  }
+
+  // Domain Management
+  async addDomain(projectId: string, domain: string): Promise<VercelDomain> {
+    // POST /v9/projects/:id/domains
+    // Adds custom domain to project
+  }
+
+  async verifyDomain(projectId: string, domain: string): Promise<boolean> {
+    // POST /v9/projects/:id/domains/:domain/verify
+    // Verifies domain configuration
+  }
+
+  // Environment Variables
+  async setEnvVar(
+    projectId: string,
+    key: string,
+    value: string,
+    type: 'encrypted' | 'plain' = 'encrypted'
+  ): Promise<void> {
+    // POST /v10/projects/:id/env
+    // Sets environment variable (as secret if encrypted)
+  }
+
+  async setEnvVars(projectId: string, vars: Record<string, string>): Promise<void> {
+    // Batch set environment variables
+    // DATABASE_URL should be encrypted
+  }
+
+  // Utility
+  async testConnection(): Promise<boolean> {
+    // GET /v2/user
+    // Tests API connection
+  }
+}
+```
+
+**Vercel API Integration:**
+
+- Base URL: `https://api.vercel.com`
+- Authentication: `Authorization: Bearer {token}`
+- Team scope: `?teamId={teamId}` query parameter
+
+**Key API Endpoints:**
+
+| Endpoint                     | Method | Purpose                  |
+| ---------------------------- | ------ | ------------------------ |
+| `/v9/projects`               | POST   | Create project           |
+| `/v9/projects/:id`           | GET    | Get project              |
+| `/v13/deployments`           | POST   | Create deployment        |
+| `/v13/deployments/:id`       | GET    | Get deployment status    |
+| `/v2/deployments/:id/events` | GET    | Get deployment logs      |
+| `/v9/projects/:id/domains`   | POST   | Add custom domain        |
+| `/v10/projects/:id/env`      | POST   | Set environment variable |
+
+---
 
 ### Executor Service
 
-**Purpose:** Orchestrate deployments
+**File:** `src/services/executor.ts`
+
+**Purpose:** Orchestrate deployment workflow
 
 **Methods:**
 
-- `deploy(config: DeploymentConfig): Promise<DeploymentStatus>` - Executes deployment
-- `getDeploymentStatus(id: string): DeploymentStatus | null` - Retrieves deployment status
+```typescript
+class ExecutorService {
+  constructor(
+    private vercelService: VercelService,
+    private dataService: DataService
+  ) {}
 
-**Logic:**
+  async deploy(config: DeploymentConfig): Promise<DeploymentRecord> {
+    // 1. Create deployment record (status: queued)
+    const record = await this.createDeploymentRecord(config);
 
-1. Validate deployment configuration
-2. Select appropriate vendor adapter
-3. Execute deployment via adapter
-4. Track deployment status (in-memory)
-5. Save deployment record to disk
-6. Update package deployment stats
-7. Return deployment status
+    // 2. Start async deployment
+    this.executeDeployment(record.id, config).catch((err) => {
+      this.handleDeploymentError(record.id, err);
+    });
+
+    // 3. Return record immediately
+    return record;
+  }
+
+  private async executeDeployment(deploymentId: string, config: DeploymentConfig): Promise<void> {
+    try {
+      // Update status: building
+      await this.updateStatus(deploymentId, 'building', ['Starting deployment...']);
+
+      // Step 1: Create or get Vercel project
+      const project = await this.getOrCreateProject(config);
+      await this.addLog(deploymentId, `Vercel project: ${project.name}`);
+
+      // Step 2: Set environment variables
+      if (config.envVars) {
+        await this.setEnvironmentVariables(project.id, config.envVars);
+        await this.addLog(deploymentId, 'Environment variables configured');
+      }
+
+      // Step 3: Set DATABASE_URL if provided
+      if (config.databaseUrl) {
+        await this.vercelService.setEnvVar(
+          project.id,
+          'DATABASE_URL',
+          config.databaseUrl,
+          'encrypted'
+        );
+        await this.addLog(deploymentId, 'Database connection string configured (encrypted)');
+      }
+
+      // Step 4: Deploy to Vercel
+      const deployment = await this.vercelService.deploy({
+        projectName: config.projectName,
+        projectPath: config.projectPath,
+        envVars: config.envVars,
+        buildCommand: config.buildCommand,
+        outputDirectory: config.outputDirectory,
+      });
+      await this.addLog(deploymentId, `Deployment started: ${deployment.id}`);
+
+      // Step 5: Poll deployment status
+      await this.pollDeploymentStatus(deploymentId, deployment.id);
+
+      // Step 6: Configure custom domain
+      const fullDomain = `${config.subdomain}.${process.env.VERCEL_DOMAIN}`;
+      await this.vercelService.addDomain(project.id, fullDomain);
+      await this.addLog(deploymentId, `Custom domain configured: ${fullDomain}`);
+
+      // Step 7: Verify domain
+      const verified = await this.vercelService.verifyDomain(project.id, fullDomain);
+      if (verified) {
+        await this.addLog(deploymentId, 'Domain verified successfully');
+      }
+
+      // Step 8: Update deployment record (status: ready)
+      await this.updateStatus(deploymentId, 'ready', ['Deployment complete!']);
+      await this.markComplete(deploymentId, {
+        vercelDeploymentId: deployment.id,
+        vercelDeploymentUrl: `https://${deployment.url}`,
+        customDomainConfigured: verified,
+        fullDomain,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private async pollDeploymentStatus(
+    deploymentId: string,
+    vercelDeploymentId: string
+  ): Promise<void> {
+    // Poll every 3 seconds until deployment is ready or error
+    const maxAttempts = 200; // 10 minutes max
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      const deployment = await this.vercelService.getDeploymentStatus(vercelDeploymentId);
+
+      if (deployment.readyState === 'READY') {
+        await this.addLog(deploymentId, 'Deployment ready!');
+        return;
+      } else if (deployment.readyState === 'ERROR') {
+        throw new Error('Deployment failed on Vercel');
+      } else if (deployment.readyState === 'CANCELED') {
+        throw new Error('Deployment was canceled');
+      }
+
+      // Still building, wait and retry
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      attempts++;
+    }
+
+    throw new Error('Deployment timeout');
+  }
+
+  private async handleDeploymentError(deploymentId: string, error: Error): Promise<void> {
+    await this.updateStatus(deploymentId, 'error', [`Error: ${error.message}`]);
+    await this.markComplete(deploymentId, { error: error.message });
+  }
+
+  async getDeploymentStatus(deploymentId: string): Promise<DeploymentRecord | null> {
+    return this.dataService.getDeployment(deploymentId);
+  }
+}
+```
+
+---
 
 ### Data Service
+
+**File:** `src/services/data.ts`
 
 **Purpose:** Persist and retrieve data
 
 **Methods:**
 
-- `getAllPackages(): Promise<SavedPackage[]>`
-- `savePackage(pkg: PackageInfo): Promise<SavedPackage>`
-- `getPackageById(id: string): Promise<SavedPackage | null>`
-- `updatePackageDeployment(packageId: string): Promise<void>`
-- `getAllDeployments(): Promise<DeploymentRecord[]>`
-- `saveDeployment(deployment): Promise<DeploymentRecord>`
-- `updateDeploymentStatus(id: string, updates): Promise<void>`
-- `getDeploymentsByPackage(packageId: string): Promise<DeploymentRecord[]>`
-- `getLatestDeployment(packageId: string): Promise<DeploymentRecord | null>`
-
-**Storage:**
-
-- Uses JSON files: `packages.json` and `deployments.json`
-- Files stored in `/deployer/app/data/`
-- Simple read/write operations with JSON.parse/stringify
-
-### Vendor Adapters
-
-**Purpose:** Interface with specific hosting platforms
-
-**Interface:**
-
 ```typescript
-interface VendorAdapter {
-  name: VendorName;
-  deploy(config: DeploymentConfig): Promise<DeploymentStatus>;
-  validate(config: DeploymentConfig): Promise<boolean>;
-  getRequiredEnvVars(): string[];
+class DataService {
+  private projectsFile = path.join(__dirname, '../../data/projects.json');
+  private deploymentsFile = path.join(__dirname, '../../data/deployments.json');
+
+  // Projects
+  async getAllProjects(): Promise<SavedProject[]> {
+    // Read projects.json
+  }
+
+  async saveProject(project: ProjectInfo): Promise<SavedProject> {
+    // Add UUID, timestamps, save to projects.json
+  }
+
+  async getProject(id: string): Promise<SavedProject | null> {
+    // Find project by ID
+  }
+
+  async updateProject(id: string, updates: Partial<SavedProject>): Promise<void> {
+    // Update project fields
+  }
+
+  async incrementDeploymentCount(projectId: string): Promise<void> {
+    // Increment deploymentCount, update lastDeployedAt
+  }
+
+  // Deployments
+  async getAllDeployments(): Promise<DeploymentRecord[]> {
+    // Read deployments.json, sort by startedAt desc
+  }
+
+  async getDeploymentsByProject(projectId: string): Promise<DeploymentRecord[]> {
+    // Filter deployments by projectId
+  }
+
+  async getDeployment(id: string): Promise<DeploymentRecord | null> {
+    // Find deployment by ID
+  }
+
+  async saveDeployment(deployment: DeploymentRecord): Promise<void> {
+    // Add to deployments.json
+  }
+
+  async updateDeployment(id: string, updates: Partial<DeploymentRecord>): Promise<void> {
+    // Update deployment fields
+  }
+
+  async getLatestDeployment(projectId: string): Promise<DeploymentRecord | null> {
+    // Get most recent deployment for project
+  }
+
+  // Utility
+  private readJSON<T>(file: string): Promise<T> {
+    // Read and parse JSON file
+  }
+
+  private writeJSON<T>(file: string, data: T): Promise<void> {
+    // Write JSON file atomically
+  }
 }
 ```
 
-**Implementations:**
+---
 
-- **Vercel** - Uses Vercel CLI or API
-- **Railway** - Uses Railway CLI or API
-- **Netlify** - Uses Netlify CLI or API
-- **Render** - Uses Render API
-- **Cloudflare Pages** - Uses Wrangler CLI
-- **Fly.io** - Uses Fly CLI
+## UI Design & Appearance
 
-**Deployment Flow:**
+### Visual Style
 
-1. Validate configuration (API keys, env vars)
-2. Build package locally or trigger remote build
-3. Upload/deploy to vendor platform
-4. Stream logs back to deployment status
-5. Return deployment URL on success
+**Futuristic Dark Theme** with glowing accents and smooth animations
+
+**Design Language:**
+
+- Dark, high-contrast interface with subtle gradients
+- Glowing borders and hover effects
+- Soft shadows with colored glows
+- Smooth transitions and micro-interactions
+- Terminal-inspired typography with modern touches
+
+### Color Palette
+
+```css
+/* Primary Colors */
+--bg-primary: #0a0e1a; /* Deep space blue - main background */
+--bg-secondary: #111827; /* Slightly lighter - cards, panels */
+--bg-tertiary: #1a1f35; /* Elevated surfaces */
+
+/* Accent Colors */
+--accent-blue: #3b82f6; /* Electric blue - primary actions */
+--accent-blue-glow: #60a5fa; /* Lighter blue - glow effect */
+--accent-green: #10b981; /* Neon green - success states */
+--accent-green-glow: #34d399; /* Lighter green - glow effect */
+--accent-purple: #8b5cf6; /* Deep purple - secondary actions */
+--accent-purple-glow: #a78bfa; /* Lighter purple - glow effect */
+--accent-yellow: #fbbf24; /* Bright yellow - warnings, highlights */
+--accent-yellow-glow: #fcd34d; /* Lighter yellow - glow effect */
+
+/* Status Colors */
+--status-success: #10b981; /* Green - deployment success */
+--status-error: #ef4444; /* Red - deployment error */
+--status-warning: #fbbf24; /* Yellow - warnings */
+--status-building: #3b82f6; /* Blue - in progress */
+--status-queued: #8b5cf6; /* Purple - queued */
+
+/* Text Colors */
+--text-primary: #f9fafb; /* Almost white - primary text */
+--text-secondary: #9ca3af; /* Gray - secondary text */
+--text-tertiary: #6b7280; /* Darker gray - muted text */
+
+/* Border & Glow */
+--border-default: rgba(59, 130, 246, 0.2); /* Subtle blue border */
+--border-hover: rgba(59, 130, 246, 0.5); /* Brighter on hover */
+--glow-blue: 0 0 20px rgba(59, 130, 246, 0.5);
+--glow-green: 0 0 20px rgba(16, 185, 129, 0.5);
+--glow-purple: 0 0 20px rgba(139, 92, 246, 0.5);
+--glow-yellow: 0 0 20px rgba(251, 191, 36, 0.5);
+```
+
+### Component Styles
+
+#### Cards & Panels
+
+- Dark background (`--bg-secondary`) with subtle gradient
+- Glowing border on hover (blue glow)
+- Rounded corners (8-12px)
+- Box shadow with colored glow effect
+
+#### Buttons
+
+- **Primary**: Blue gradient with blue glow on hover
+- **Success**: Green gradient with green glow on hover
+- **Secondary**: Purple gradient with purple glow on hover
+- **Warning**: Yellow/orange gradient with yellow glow
+- Smooth scale transform on hover (1.02x)
+- Ripple effect on click
+
+#### Input Fields
+
+- Dark background (`--bg-tertiary`)
+- Subtle border that glows on focus
+- Placeholder text in `--text-tertiary`
+- Auto-complete with glowing suggestions
+
+#### Status Indicators
+
+- **Queued**: Purple glow with pulsing animation
+- **Building**: Blue glow with progress bar
+- **Success**: Green glow with checkmark icon
+- **Error**: Red glow with error icon
+
+#### Deployment Logs
+
+- Terminal-style monospace font
+- Dark background with subtle scan-line effect
+- Color-coded log levels:
+  - Info: Blue
+  - Success: Green
+  - Warning: Yellow
+  - Error: Red
+- Auto-scroll with smooth animation
+
+#### Navigation
+
+- Side panel with dark background
+- Active route with colored left border and glow
+- Icons with matching accent colors
+- Smooth slide-in animations
+
+### Typography
+
+```css
+--font-heading: 'Inter', 'SF Pro Display', -apple-system, sans-serif;
+--font-body: 'Inter', -apple-system, system-ui, sans-serif;
+--font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+```
+
+### Animations & Effects
+
+**Glow Animations:**
+
+- Pulsing glow for loading states
+- Border glow on hover (smooth transition)
+- Button glow on focus/hover
+
+**Transitions:**
+
+- Card hover: lift effect with shadow increase
+- Button press: slight scale down
+- Page transitions: fade + slide
+
+**Micro-interactions:**
+
+- Success checkmark animation (draw-in effect)
+- Progress bars with gradient sweep
+- Ripple effect on clicks
+- Smooth number count-ups for stats
+
+### Layout
+
+**Dashboard:**
+
+- Grid of project cards (2-3 columns)
+- Each card has glowing border matching project status
+- Hover reveals "Deploy" button with glow effect
+
+**Deployment Form:**
+
+- Single-column centered form
+- Sections with glowing dividers
+- Input fields with focus glow
+- Submit button with prominent glow
+
+**Deployment Status:**
+
+- Full-width terminal-style log viewer
+- Status indicator with pulsing glow
+- Progress bar with gradient fill
+- Floating action buttons with glow
+
+**History:**
+
+- Dark table with alternating row backgrounds
+- Status badges with matching glow colors
+- Expandable rows for detailed logs
+- Filter pills with glow on active state
+
+### Example CSS Snippet
+
+```css
+.deployment-card {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.3s ease;
+}
+
+.deployment-card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: var(--glow-blue);
+  transform: translateY(-2px);
+}
+
+.deploy-button {
+  background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+  color: var(--text-primary);
+  border: none;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.deploy-button:hover {
+  box-shadow: var(--glow-blue);
+  transform: scale(1.02);
+}
+
+.status-building {
+  color: var(--accent-blue);
+  text-shadow: var(--glow-blue);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.log-line {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  padding: 4px 12px;
+  border-left: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.log-line.success {
+  color: var(--accent-green);
+  border-left-color: var(--accent-green);
+}
+
+.log-line.error {
+  color: var(--status-error);
+  border-left-color: var(--status-error);
+}
+```
 
 ---
 
-## User Workflows
+## Implementation Plan
 
-### Initial Setup
+### Phase 1: Core Services (Backend)
 
-1. User runs `npm install` in `/deployer/app`
-2. User copies `.env.example` to `.env`
-3. User adds vendor API keys to `.env`
-4. User runs `npm run dev` to start the deployer
-5. Browser opens to `http://localhost:3000`
+**Goal:** Build all backend services and API endpoints
 
-### First-Time Deployment
+**Tasks:**
 
-1. User clicks "Scan Packages" button
-2. System scans monorepo and displays detected packages
-3. User selects a package to deploy
-4. System shows deployment plan with vendor options
-5. User selects preferred vendor
-6. User enters required environment variables
-7. User clicks "Deploy" button
-8. System executes deployment and shows real-time progress
-9. On success, displays deployment URL
-10. Package stats updated (deployment count, last deployed)
+1. **Setup Project Structure** ✅ (Already done)
+   - TypeScript configuration
+   - Express server
+   - Environment variables
 
-### Subsequent Deployments
+2. **Implement Scanner Service**
+   - [app/src/services/scanner.ts](../../deployer/app/src/services/scanner.ts)
+   - `scanDirectory()` method
+   - `parsePackageJson()` helper
+   - Unit tests
 
-1. User navigates to packages list
-2. Sees package with existing deployment stats
-3. Clicks "Deploy Again" or "Redeploy"
-4. Previous configuration pre-filled
-5. User can modify settings or keep as-is
-6. Clicks "Deploy"
-7. New deployment record created
-8. Stats updated
+3. **Implement Analyzer Service**
+   - [app/src/services/analyzer.ts](../../deployer/app/src/services/analyzer.ts)
+   - `analyze()` method
+   - `detectProjectType()`, `detectFramework()`, `detectBuildTool()` helpers
+   - `detectDatabase()` - Key feature for DB detection
+   - Classification rules
+   - Unit tests
 
-### Viewing Deployment History
+4. **Implement Vercel Service**
+   - [app/src/services/vercel.ts](../../deployer/app/src/services/vercel.ts)
+   - Vercel API client setup
+   - `createProject()`, `getProject()` methods
+   - `deploy()` - Core deployment logic
+   - `getDeploymentStatus()`, `getDeploymentLogs()`
+   - `addDomain()`, `verifyDomain()` - Custom domain management
+   - `setEnvVar()`, `setEnvVars()` - Environment variables
+   - `testConnection()` - Health check
+   - Integration tests with real Vercel API
 
-1. User navigates to "Deployments" page
-2. Sees table of all deployments (all packages)
-3. Can filter by package, vendor, or status
-4. Clicks deployment to view full logs
-5. Can see deployment URL, duration, status
+5. **Implement Executor Service**
+   - [app/src/services/executor.ts](../../deployer/app/src/services/executor.ts)
+   - `deploy()` method - Orchestrates full workflow
+   - `executeDeployment()` - Async deployment execution
+   - `pollDeploymentStatus()` - Polling logic
+   - `handleDeploymentError()` - Error handling
+   - Integration tests
+
+6. **Implement Data Service**
+   - [app/src/services/data.ts](../../deployer/app/src/services/data.ts)
+   - JSON file persistence (reads/writes to `app/data/` directory)
+   - CRUD operations for projects and deployments
+   - Atomic writes to prevent corruption
+   - Unit tests
+
+7. **Implement API Routes**
+   - [app/src/server/routes.ts](../../deployer/app/src/server/routes.ts)
+   - All endpoints from API design
+   - Input validation
+   - Error handling middleware
+   - Integration tests
+
+---
+
+### Phase 2: Frontend UI
+
+**Goal:** Build web interface for deployment workflow
+
+**Tasks:**
+
+1. **Dashboard Page**
+   - List all projects with cards
+   - Show deployment stats per project
+   - "Scan Projects" button
+   - "Deploy" action per project
+
+2. **Deploy Form**
+   - Subdomain input with validation
+   - Environment variables form
+   - Database URL input (conditional on `hasDatabase`)
+   - Build configuration (optional)
+   - "Deploy" button
+
+3. **Deployment Status View**
+   - Real-time status updates
+   - Live logs streaming
+   - Progress indicator
+   - Success/error states
+   - Deployment URL display
+
+4. **Deployment History**
+   - Table of all deployments
+   - Filter by project
+   - View logs for past deployments
+
+---
+
+### Phase 3: Polish & Testing
+
+**Goal:** Production-ready deployment tool
+
+**Tasks:**
+
+1. **Error Handling**
+   - Comprehensive error messages
+   - Retry logic for network failures
+   - Graceful degradation
+
+2. **Validation**
+   - Subdomain validation (DNS-safe characters)
+   - Environment variable validation
+   - Database URL validation
+
+3. **Testing**
+   - Unit tests for all services
+   - Integration tests for API
+   - E2E tests for deployment workflow
+
+4. **Documentation**
+   - README with setup instructions
+   - API documentation
+   - Troubleshooting guide
 
 ---
 
 ## Security Considerations
 
-### Environment Variables
+### Token Management
 
-- Stored in `.env` file (gitignored)
-- Never sent to client (except keys for display)
-- Values not persisted in deployment records
-- Only environment variable **keys** stored in records
+- `VERCEL_TOKEN` stored in `.env` (gitignored)
+- Never sent to frontend
+- Validated on server startup
 
-### API Keys
+### Database Connection Strings
 
-- Vendor API keys stored in `.env`
-- Required for deployments
-- Validated before deployment
-- Never exposed in UI or API responses
+- Always stored as encrypted Vercel secrets
+- Never logged in plain text
+- Only key names stored in deployment records
 
-### Local-Only Operation
+### Domain Verification
 
-- No external data storage
-- No telemetry or analytics sent
-- All data stays on developer's machine
-- Vendor adapters only communicate with chosen platforms
+- Verify custom domain ownership before configuration
+- Prevent subdomain takeover attacks
+- Validate DNS records
 
 ---
 
 ## Performance Considerations
 
-### Scanning
+### Deployment Speed
 
-- Fast directory traversal (only `/packages` scanned)
-- Minimal file I/O (only `package.json` files read)
-- No heavy parsing or analysis
-
-### Deployment
-
-- Asynchronous execution
-- Non-blocking API (returns status immediately)
-- Status polling for progress updates
-- Logs streamed incrementally
+- Asynchronous execution (non-blocking API)
+- Parallel API calls where possible
+- Efficient polling (3-second intervals)
 
 ### Data Persistence
 
 - Lightweight JSON files
-- Read on-demand (not kept in memory)
-- Write atomically (prevents corruption)
-- No database overhead
+- Read on-demand
+- Atomic writes with temp files
 
 ---
 
 ## Error Handling
 
-### Scanner Errors
+### Vercel API Errors
 
-- Missing packages directory → Return empty result
-- Invalid package.json → Skip package, log warning
-- Permission errors → Show helpful error message
+- Rate limiting: Implement backoff
+- Network errors: Retry with exponential backoff
+- Authentication errors: Clear error message
 
-### Deployment Errors
+### Deployment Failures
 
-- Missing API keys → Show configuration error
-- Invalid vendor → Reject with 400 error
-- Deployment failure → Save error in record, show to user
-- Network errors → Retry logic in vendor adapters
+- Save detailed error logs
+- Mark deployment as `error` status
+- Preserve all state for debugging
 
-### Data Persistence Errors
+### Domain Configuration Errors
 
-- File write failures → Show error, don't lose in-memory state
-- JSON parse errors → Show warning, fall back to empty state
-- Disk full → Clear error message with troubleshooting steps
+- DNS propagation delays: Patient retry
+- Invalid subdomain: Validate before deploy
+- Domain already in use: Clear error message
 
 ---
 
 ## Future Enhancements
 
-### Phase 2: Frontend UI
+### Phase 4: Advanced Features
 
-- Implement web interface with all planned views
-- Real-time deployment streaming (SSE/WebSockets)
-- Interactive vendor comparison
-- Cost calculator
+- [ ] **Deployment Rollback** - Revert to previous deployment
+- [ ] **Environment Variable Templates** - Save common env var sets
+- [ ] **Multi-project Deployments** - Deploy multiple projects at once
+- [ ] **Deployment Scheduling** - Schedule deployments for later
+- [ ] **Webhook Integration** - Auto-deploy on git push
 
-### Phase 3: Advanced Features
+### Phase 5: Monitoring & Analytics
 
-- Multi-package deployments
-- Deployment rollback
-- Environment variable templates
-- Deployment scheduling
-- Webhook triggers
+- [ ] **Health Checks** - Ping deployed apps for uptime
+- [ ] **Performance Metrics** - Track deployment times
+- [ ] **Cost Tracking** - Monitor Vercel usage and costs
+- [ ] **Deployment Analytics** - Success rates, trends
 
-### Phase 4: Data & Analytics
+### Phase 6: Developer Experience
 
-- Migration to SQLite/PostgreSQL
-- Advanced deployment analytics
-- Cost tracking with actual usage
-- Performance monitoring integration
+- [ ] **CLI Interface** - Command-line alternative to web UI
+- [ ] **Notifications** - Slack/Discord deployment notifications
+- [ ] **Preview Deployments** - Staging environments
+- [ ] **Git Integration** - Auto-detect branch, commit info
 
-### Phase 5: Platform Expansion
+---
 
-- Additional vendor adapters (AWS, Azure, Heroku)
-- Docker/Kubernetes support
-- Self-hosted deployment options
-- Custom deployment scripts
+## File Structure
+
+```
+deployer/
+├── README.md                    # Project documentation and setup instructions
+│
+└── app/
+    ├── package.json             # Node.js dependencies and scripts
+    ├── tsconfig.json            # TypeScript configuration
+    ├── .env                     # Environment variables (gitignored)
+    ├── .env.example             # Environment template
+    ├── .gitignore               # Git ignore rules
+    │
+    ├── src/                     # Application source code
+    │   ├── server/              # Backend server
+    │   │   ├── index.ts         # Express server entry point
+    │   │   └── routes.ts        # API route definitions
+    │   │
+    │   ├── client/              # Frontend application
+    │   │   ├── index.html       # Main HTML page
+    │   │   ├── app.ts           # Frontend TypeScript logic
+    │   │   └── styles.css       # CSS styles (futuristic dark theme)
+    │   │
+    │   ├── services/            # Business logic services
+    │   │   ├── scanner.ts       # Project scanner service
+    │   │   ├── analyzer.ts      # Project analyzer service
+    │   │   ├── vercel.ts        # Vercel API client service
+    │   │   ├── executor.ts      # Deployment orchestrator service
+    │   │   └── data.ts          # Data persistence service (JSON)
+    │   │
+    │   ├── types/               # TypeScript type definitions
+    │   │   └── index.ts         # Shared type definitions
+    │   │
+    │   └── utils/               # Utility functions
+    │       ├── logger.ts        # Logging utility
+    │       └── validator.ts     # Input validation utility
+    │
+    ├── data/                    # Runtime data storage (not built)
+    │   ├── .gitkeep             # Keep directory in git
+    │   ├── projects.json        # Persisted project records
+    │   └── deployments.json     # Deployment history records
+    │
+    ├── dist/                    # Compiled JavaScript output (gitignored)
+    │
+    └── node_modules/            # NPM dependencies (gitignored)
+```
+
+**Key Directories:**
+
+- **`src/server/`** - Express.js backend with API routes
+- **`src/client/`** - Frontend UI with futuristic dark theme
+- **`src/services/`** - Core business logic (scanner, analyzer, vercel, executor, data)
+- **`src/types/`** - Shared TypeScript interfaces and types
+- **`src/utils/`** - Helper functions and utilities
+- **`data/`** - JSON files for runtime data (next to src, not inside)
+  - Lives alongside `src/` to keep runtime data separate from source code
+  - Not included in TypeScript compilation
+  - Changes during application runtime
+
+**Configuration Files:**
+
+- **`package.json`** - Scripts: `dev`, `build`, `start`, `test`
+- **`tsconfig.json`** - Compiles `src/` to `dist/`, excludes `data/` and `node_modules/`
+- **`.env`** - Contains `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_DOMAIN`, `PORT`
+- **`.env.example`** - Template for environment variables
+
+---
+
+## Next Steps
+
+1. **Remove old vendor adapters** - Delete Railway, Netlify, Render services
+2. **Implement Vercel Service** - Core Vercel API integration
+3. **Update Analyzer** - Focus on database detection
+4. **Test Vercel API** - Ensure token works, test all endpoints
+5. **Implement deployment workflow** - End-to-end deployment with subdomain
+6. **Build frontend UI** - Simple, focused deployment interface
+
+---
+
+**Status:** Ready for implementation
+**Priority:** High
+**Estimated Effort:** 2-3 days for backend, 1-2 days for frontend

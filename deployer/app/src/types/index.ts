@@ -1,104 +1,111 @@
-export type PackageType = 'frontend' | 'backend' | 'fullstack' | 'unknown';
+// Core Types
+export type ProjectType = 'frontend' | 'backend' | 'fullstack';
+export type Framework =
+  | 'vue'
+  | 'react'
+  | 'next'
+  | 'express'
+  | 'fastify'
+  | 'nest'
+  | 'nuxt'
+  | 'svelte';
+export type BuildTool = 'vite' | 'webpack' | 'tsc' | 'next' | 'esbuild' | 'rollup';
+export type DatabaseType = 'postgres' | 'mysql' | 'mongodb' | 'prisma' | 'sqlite';
+export type DeploymentStatus = 'queued' | 'building' | 'ready' | 'error' | 'canceled';
 
-export type BuildTool = 'vite' | 'webpack' | 'tsc' | 'esbuild' | 'rollup' | 'unknown';
-
-export type Framework = 'vue' | 'react' | 'svelte' | 'express' | 'fastify' | 'nest' | 'unknown';
-
-export type VendorName = 'vercel' | 'netlify' | 'cloudflare-pages' | 'railway' | 'render' | 'fly';
-
-export interface PackageInfo {
+// Project Information
+export interface ProjectInfo {
   name: string;
   path: string;
-  type: PackageType;
-  framework: Framework;
-  buildTool: BuildTool;
+  type: ProjectType;
+  framework?: Framework;
+  buildTool?: BuildTool;
   nodeVersion?: string;
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
   scripts: Record<string, string>;
   hasDatabase: boolean;
-  databaseType?: string;
-  requiredEnvVars: string[];
+  databaseType?: DatabaseType;
+  detectedEnvVars: string[];
 }
 
-export interface DeploymentOption {
-  vendor: VendorName;
-  vendorDisplayName: string;
-  recommended: boolean;
-  estimatedCost: {
-    min: number;
-    max: number;
-    currency: string;
-    period: string;
-  };
-  features: string[];
-  limitations?: string[];
-  signupUrl: string;
-  setupInstructions: string[];
-}
-
-export interface DeploymentPlan {
-  packageName: string;
-  packageType: PackageType;
-  deploymentOptions: DeploymentOption[];
-  buildCommand?: string;
-  outputDirectory?: string;
-  envVarsRequired: string[];
-  notes: string[];
-}
-
-export interface DeploymentConfig {
-  packageName: string;
-  vendor: VendorName;
-  envVars: Record<string, string>;
-  buildCommand?: string;
-  outputDirectory?: string;
-  customConfig?: Record<string, any>;
-}
-
-export interface DeploymentStatus {
+// Saved Project (Persisted)
+export interface SavedProject extends ProjectInfo {
   id: string;
-  packageName: string;
-  vendor: VendorName;
-  status: 'pending' | 'building' | 'deploying' | 'success' | 'failed';
-  startedAt: Date;
-  completedAt?: Date;
+  scannedAt: string;
+  lastDeployedAt?: string;
+  deploymentCount: number;
+  vercelProjectId?: string;
+  currentDomain?: string;
+}
+
+// Deployment Configuration (User Input)
+export interface DeploymentConfig {
+  projectId: string;
+  projectName: string;
+  projectPath: string;
+  subdomain: string;
+  envVars: Record<string, string>;
+  databaseUrl?: string;
+  buildCommand?: string;
+  outputDirectory?: string;
+  installCommand?: string;
+}
+
+// Deployment Record (Persisted)
+export interface DeploymentRecord {
+  id: string;
+  projectId: string;
+  projectName: string;
+  status: DeploymentStatus;
+  subdomain: string;
+  fullDomain: string;
+  startedAt: string;
+  completedAt?: string;
   logs: string[];
   error?: string;
-  deploymentUrl?: string;
+  vercelDeploymentId?: string;
+  vercelDeploymentUrl?: string;
+  customDomainConfigured: boolean;
+  envVarsSet: string[];
+  hasDatabase: boolean;
+}
+
+// Vercel API Response Types
+export interface VercelDeployment {
+  id: string;
+  url: string;
+  state: 'BUILDING' | 'READY' | 'ERROR' | 'CANCELED';
+  readyState: 'QUEUED' | 'BUILDING' | 'READY' | 'ERROR' | 'CANCELED';
+  createdAt: number;
+  buildingAt?: number;
+  ready?: number;
+  target?: string;
+}
+
+export interface VercelProject {
+  id: string;
+  name: string;
+  framework?: string;
+  devCommand?: string;
+  buildCommand?: string;
+  outputDirectory?: string;
+}
+
+export interface VercelDomain {
+  name: string;
+  verified: boolean;
+  verification?: any[];
+}
+
+// API Response Types
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
 }
 
 export interface ScanResult {
-  packages: PackageInfo[];
-  scannedAt: Date;
-  repositoryRoot: string;
-}
-
-export interface VendorAdapter {
-  name: VendorName;
-  deploy(config: DeploymentConfig): Promise<DeploymentStatus>;
-  validate(config: DeploymentConfig): Promise<boolean>;
-  getRequiredEnvVars(): string[];
-}
-
-// Data persistence types (like SQL tables)
-export interface SavedPackage extends PackageInfo {
-  id: string; // unique identifier
-  scannedAt: string; // ISO timestamp
-  lastDeployedAt?: string; // ISO timestamp
-  deploymentCount: number;
-}
-
-export interface DeploymentRecord {
-  id: string; // unique identifier
-  packageId: string; // foreign key to SavedPackage
-  packageName: string; // denormalized for easier querying
-  vendor: VendorName;
-  status: 'pending' | 'building' | 'deploying' | 'success' | 'failed';
-  startedAt: string; // ISO timestamp
-  completedAt?: string; // ISO timestamp
-  logs: string[];
-  error?: string;
-  deploymentUrl?: string;
-  envVars?: string[]; // just keys, not values (for security)
+  projects: SavedProject[];
+  scannedAt: string;
 }
