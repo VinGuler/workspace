@@ -45,9 +45,82 @@ This document outlines the expected workflow for AI agents interacting with and 
 - **Summarize (if requested)**: Provide a concise summary of the work done, especially for complex tasks.
 - **Await Next Instruction**: Indicate readiness for the next task.
 
-## Using AI Personas and Skills
+## Global Skills (Executable Capabilities)
 
-- **Personas (`ai/personas`)**: When a specific expertise is required, the agent should internally or explicitly adopt the relevant persona to guide its reasoning and output.
-- **Skills (`ai/skills`)**: Utilize documented skills (e.g., Exporter, Scaffolder) for automating complex, repetitive tasks. If a new skill is needed, propose its definition for inclusion in `ai/skills`.
+AI agents can leverage the following operational workflows:
+
+### A. Testing
+
+- **Run tests for a specific app or package**: `pnpm run test:<name>`
+
+- **Frameworks**: Vitest for unit tests and Playwright for E2E.
+
+### B. Development (Local Execution)
+
+- **Launch apps**: `pnpm run dev:<app-name>`
+
+- **Launch templates**: `pnpm run dev:template:<template-name>`
+
+- **Production environment variables locally**: Use the Railway CLI (`railway run`) when needed.
+
+### C. Build Operations
+
+- **App Build**: `pnpm run build:<app-name>`
+
+- **Global Build**: `pnpm run build` (via Turborepo) to build the entire workspace graph.
+
+### D. Lint & Format
+
+- **Execute workspace-wide linting/formatting**: `pnpm run lint` and `pnpm run format`
+
+### E. Create from Template (The "Scaffolder")
+
+- **Workflow**: Do not simply copy-paste.
+
+- **Action**:
+  1.  Copy core files from `/templates/<tier>`.
+
+  2.  Update `package.json` names and dependencies.
+
+  3.  Update root `tsconfig.json` or workspace configs to recognize the new app.
+
+  4.  Inject necessary scripts into the local `package.json`.
+
+  5.  Run `pnpm install` and `pnpm run build:<new-app>` to verify the graph.
+  - (See `ai/skills/scaffolder.md` for more details.)
+
+### F. Smart Commit & Push
+
+- **Workflow**: Use "Conventional Commits" (e.g., `feat:`, `fix:`, `chore:`).
+
+- **Rule**: Summarize the commit message based on the **Chat Context** only.
+
+- **Constraint**: DO NOT read the physical files to generate the message (to avoid context/token overload). Summarize what was _discussed_ doing.
+
+- **Action**: Execute `git add .`, `git commit -m "..."`, and `git push`.
+
+### G. Standalone Export (The "Assignment" Skill)
+
+- **Action**: Use `pnpm deploy` to flatten a specific app from `/apps` into an isolated folder.
+
+- **Details**: Ensure all internal `@workspace` packages are bundled. Initialize a fresh Git repo and a `docker-compose.yml` in the exported folder.
+
+- (See `ai/skills/exporter.md` for more details.)
+
+## Documentation (The "Chronicler" Section)
+
+- **Responsibility**: Every major structural change or new app creation must be documented under `ai/docs/`.
+
+- **Structure**: Maintain `ai/docs/WORKSPACE_MAP.md` that lists all current apps, their status, and their tier.
+
+- **Prisma Updates**: If the schema changes, update `ai/docs/database.md` to reflect the new ERD (Entity Relationship Diagram).
+
+## Deployment Note (Railway)
+
+- All apps are deployed to Railway.
+
+- Routing is subdomain-based.
+
+- Production URLs follow the pattern: `https://<app-name>.yourdomain.com`.
 
 By following this workflow, agents can effectively contribute to the development and maintenance of the `workspace` monorepo.

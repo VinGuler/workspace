@@ -13,5 +13,11 @@ Each Markdown file in this directory represents a persona. When interacting with
 ## Contents
 
 - [`./example-persona.md`](./example-persona.md): An example of a persona definition.
-- `senior-backend-dev.md`: (Placeholder) Defines an AI persona with expertise in backend systems, APIs, and database interactions.
-- `vue-expert.md`: (Placeholder) Defines an AI persona with deep knowledge of Vue.js, frontend architecture, and UI/UX best practices.
+
+- `experienced-project-manager.md`: Defines an AI persona focused on project scope, logic flow, and edge cases.
+
+- `experienced-full-stack-developer.md`: Defines an AI persona with expertise in Vue 3, Express, and Prisma.
+
+- `experienced-qa-engineer.md`: Defines an AI persona responsible for testing and review against PRDs.
+
+- `experienced-ui-ux-designer.md`: Defines an AI persona specializing in UI/UX and Vue-specific styling.
