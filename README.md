@@ -1,69 +1,43 @@
-# Website
+# Workspace
 
-A full-stack web application monorepo with a Vue.js frontend and Express.js backend.
+An app factory — a monorepo for quickly building, testing, and deploying multiple web apps from shared foundations.
+
+## How It Works
+
+Pick a template, scaffold a new app into `apps/`, and it inherits the full toolchain: TypeScript, linting, testing, CI hooks, and shared packages. Each app is independently deployable.
 
 ## Structure
 
 ```
-website/
-├── packages/
-│   ├── client/   # Vue.js SPA (Vite)
-│   └── server/   # Express.js API server
-├── package.json
-├── Dockerfile
-└── docker-compose.yml
+apps/          Deployable apps (each is its own project)
+packages/      Shared internal libraries (imported as @workspace/*)
+templates/     Gold-master starting points for new apps
+ai/            AI agent context — personas, skills, docs
 ```
 
-## Getting Started
+## Tech Stack
+
+**Frontend:** Vue 3 + Vite | **Backend:** Express 5 | **Language:** TypeScript | **DB:** Prisma + Postgres
+
+## Quick Start
 
 ```sh
-npm install
+corepack enable pnpm
+pnpm install
+pnpm dev            # runs all apps in parallel
+pnpm dev --filter=landing-page   # run a single app
 ```
 
-## Available Scripts
+## Scripts
 
-| Command                | Description                                               |
-| ---------------------- | --------------------------------------------------------- |
-| `npm run dev`          | Start both client and server in development mode          |
-| `npm run dev:client`   | Start only the Vue.js dev server (port 5173)              |
-| `npm run dev:server`   | Start only the Express server with hot-reload (port 3000) |
-| `npm run build`        | Build both client and server for production               |
-| `npm run test`         | Run all tests                                             |
-| `npm run test:client`  | Run only client tests                                     |
-| `npm run test:server`  | Run only server tests                                     |
-| `npm run lint`         | Lint all files with ESLint                                |
-| `npm run lint:fix`     | Lint and auto-fix issues                                  |
-| `npm run format`       | Format all files with Prettier                            |
-| `npm run format:check` | Check formatting without writing                          |
+| Command       | What it does                                           |
+| ------------- | ------------------------------------------------------ |
+| `pnpm dev`    | Start all apps in dev mode                             |
+| `pnpm build`  | Build everything (Turborepo caches unchanged packages) |
+| `pnpm test`   | Run all tests                                          |
+| `pnpm lint`   | Lint all files                                         |
+| `pnpm format` | Format with Prettier                                   |
 
-## Development
+## Deployment
 
-Run both client and server concurrently:
-
-```sh
-npm run dev
-```
-
-- Client: `http://localhost:5173`
-- Server: `http://localhost:3000`
-
-## Production Build
-
-Build and run the production server:
-
-```sh
-npm run build
-npm run start -w server
-```
-
-The server serves the Vue.js client at `http://localhost:3000`.
-
-## Docker
-
-Build and run using Docker Compose:
-
-```sh
-docker compose up --build
-```
-
-The app will be available at `http://localhost:3000`.
+Apps deploy to Railway from the monorepo root. Each app gets its own subdomain.

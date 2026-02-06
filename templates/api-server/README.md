@@ -1,43 +1,18 @@
-# server
+# Template: API Server
 
-Express.js backend server for the website. Serves the Vue.js client in production and provides API endpoints.
+An Express 5 backend. Use this for REST APIs, webhooks, or services that don't serve a frontend.
 
-## Overview
+**Tier 2** — server only, no client.
 
-- **Framework**: Express.js 5
-- **Language**: TypeScript
-- **Runtime**: Node.js
+## Stack
 
-In production, the server serves the built Vue.js client as static files and handles SPA routing.
+Express 5 + TypeScript + tsx (dev hot-reload)
 
-## Project Setup
-
-From the root of the monorepo:
+## Usage
 
 ```sh
-npm install
+pnpm dev        # dev server at localhost:3000 (auto-restarts on changes)
+pnpm build      # compile to dist/
+pnpm start      # run production build
+pnpm test       # run tests
 ```
-
-### Development with Hot-Reload
-
-```sh
-npm run dev -w server
-```
-
-Watches all files in `src/` and automatically restarts on changes.
-
-### Build for Production
-
-```sh
-npm run build -w server
-```
-
-Compiles TypeScript to JavaScript in the `dist/` folder.
-
-### Run Production Server
-
-```sh
-npm run start -w server
-```
-
-Starts the server at `http://localhost:3000`.
