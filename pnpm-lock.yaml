@@ -99,7 +99,16 @@ importers:
       express:
         specifier: ^5.0.1
         version: 5.2.1
+      pinia:
+        specifier: ^3.0.4
+        version: 3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3))
+      vue:
+        specifier: ^3.5.26
+        version: 3.5.27(typescript@5.9.3)
     devDependencies:
+      '@tsconfig/node24':
+        specifier: ^24.0.3
+        version: 24.0.4
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -110,14 +119,26 @@ importers:
         specifier: ^27.0.0
         version: 27.0.0
       '@types/node':
-        specifier: ^22.10.5
-        version: 22.19.9
+        specifier: ^24.10.4
+        version: 24.10.11
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.3
+        version: 6.0.4(vite@7.3.1(@types/node@24.10.11)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.27(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2.4.6
+        version: 2.4.6
+      '@vue/tsconfig':
+        specifier: ^0.8.1
+        version: 0.8.1(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3))
       jsdom:
         specifier: ^27.4.0
         version: 27.4.0(@noble/hashes@1.8.0)
+      npm-run-all2:
+        specifier: ^8.0.4
+        version: 8.0.4
       supertest:
         specifier: ^7.2.2
         version: 7.2.2
@@ -125,8 +146,20 @@ importers:
         specifier: ^4.19.2
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
+        specifier: ~5.9.3
         version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@24.10.11)(tsx@4.21.0)(yaml@2.8.2)
+      vite-plugin-vue-devtools:
+        specifier: ^8.0.5
+        version: 8.0.6(vite@7.3.1(@types/node@24.10.11)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.27(typescript@5.9.3))
+      vitest:
+        specifier: ^4.0.17
+        version: 4.0.18(@types/node@24.10.11)(jsdom@27.4.0(@noble/hashes@1.8.0))(tsx@4.21.0)(yaml@2.8.2)
+      vue-tsc:
+        specifier: ^3.2.2
+        version: 3.2.4(typescript@5.9.3)
 
   templates/client-server-database:
     dependencies:
@@ -136,7 +169,16 @@ importers:
       express:
         specifier: ^5.0.1
         version: 5.2.1
+      pinia:
+        specifier: ^3.0.4
+        version: 3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3))
+      vue:
+        specifier: ^3.5.26
+        version: 3.5.27(typescript@5.9.3)
     devDependencies:
+      '@tsconfig/node24':
+        specifier: ^24.0.3
+        version: 24.0.4
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -147,14 +189,26 @@ importers:
         specifier: ^27.0.0
         version: 27.0.0
       '@types/node':
-        specifier: ^22.10.5
-        version: 22.19.9
+        specifier: ^24.10.4
+        version: 24.10.11
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.3
+        version: 6.0.4(vite@7.3.1(@types/node@24.10.11)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.27(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2.4.6
+        version: 2.4.6
+      '@vue/tsconfig':
+        specifier: ^0.8.1
+        version: 0.8.1(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3))
       jsdom:
         specifier: ^27.4.0
         version: 27.4.0(@noble/hashes@1.8.0)
+      npm-run-all2:
+        specifier: ^8.0.4
+        version: 8.0.4
       supertest:
         specifier: ^7.2.2
         version: 7.2.2
@@ -162,8 +216,20 @@ importers:
         specifier: ^4.19.2
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
+        specifier: ~5.9.3
         version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@24.10.11)(tsx@4.21.0)(yaml@2.8.2)
+      vite-plugin-vue-devtools:
+        specifier: ^8.0.5
+        version: 8.0.6(vite@7.3.1(@types/node@24.10.11)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.27(typescript@5.9.3))
+      vitest:
+        specifier: ^4.0.17
+        version: 4.0.18(@types/node@24.10.11)(jsdom@27.4.0(@noble/hashes@1.8.0))(tsx@4.21.0)(yaml@2.8.2)
+      vue-tsc:
+        specifier: ^3.2.2
+        version: 3.2.4(typescript@5.9.3)
 
   templates/landing-page:
     dependencies:

@@ -1,18 +1,18 @@
 # Template: Client + Server + Database
 
-The complete factory unit. Express 5 backend, vanilla TypeScript frontend, and a database connection. Use this for apps that need persistent storage.
+The complete factory unit. Express 5 backend, Vue 3 frontend, and a database connection. Use this for apps that need persistent storage.
 
 **Tier 3** — full-stack with database.
 
 ## Stack
 
-Express 5 + vanilla TypeScript client + Prisma + Postgres + tsx (dev hot-reload)
+Express 5 + Vue 3 + Vite + Pinia + Prisma + Postgres + tsx (dev hot-reload)
 
 ## Usage
 
 ```sh
-pnpm dev        # builds client, starts server at localhost:3000 (auto-restarts)
-pnpm build      # compile both client and server
+pnpm dev        # starts server and Vite dev server in parallel
+pnpm build      # compile both server and Vue client
 pnpm start      # run production build
 pnpm test       # run tests
 ```

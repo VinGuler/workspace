@@ -67,17 +67,12 @@ app.delete('/api/todos/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// Serve static files from public directory
-const publicPath = join(__dirname, '..', '..', 'public');
-app.use(express.static(publicPath));
-
-// Serve client files (compiled JavaScript from dist/client)
+// Serve Vite build output with SPA fallback
 const clientPath = join(__dirname, '..', '..', 'dist', 'client');
-app.use('/client', express.static(clientPath));
+app.use(express.static(clientPath));
 
-// Serve index.html for root path
-app.get('/', (req, res) => {
-  res.sendFile(join(publicPath, 'index.html'));
+app.get('{*path}', (req, res) => {
+  res.sendFile(join(clientPath, 'index.html'));
 });
 
 // Error handling middleware
