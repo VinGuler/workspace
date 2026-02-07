@@ -28,13 +28,32 @@ if (hasPublicDir) {
     res.sendFile(path.join(publicPath, 'index.html'));
   });
 } else {
-  // Dev mode without built client - just show a message
+  // Dev mode without built client - show template info
   app.get('/', (_req, res) => {
-    res.send('Server is running. Run "npm run build:client" to serve the client.');
+    res.send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Server</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; justify-content: center; margin-top: 4rem; }
+    .app { text-align: center; }
+    h1 { margin: 0.5rem 0 0.25rem; }
+    .description { color: #666; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>API Server</h1>
+    <p class="description">Backend-only Express API server template</p>
+  </div>
+</body>
+</html>`);
   });
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
   log('info', 'api-server', `Server is running on port ${PORT}`);

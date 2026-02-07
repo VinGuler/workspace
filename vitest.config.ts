@@ -15,6 +15,7 @@ export default defineConfig({
       },
       'templates/api-server/vitest.config.ts',
       'templates/client-server/vitest.config.ts',
+      'templates/client-server-database/vitest.config.ts',
     ],
   },
 });

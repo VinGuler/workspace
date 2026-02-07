@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useTodoStore } from './stores/todos';
+import logo from './assets/logo.png';
 
 const store = useTodoStore();
 const newTodoText = ref('');
@@ -19,7 +20,11 @@ async function handleAdd() {
 
 <template>
   <div class="app">
-    <h1>Todo List</h1>
+    <header class="app-header">
+      <img :src="logo" alt="Logo" class="logo" />
+      <h1>Client-Server</h1>
+      <p class="description">Full-stack app with Vue 3 client and Express API server</p>
+    </header>
 
     <form class="add-form" @submit.prevent="handleAdd">
       <input
@@ -56,9 +61,24 @@ async function handleAdd() {
   font-family: system-ui, sans-serif;
 }
 
-h1 {
+.app-header {
   text-align: center;
   margin-bottom: 1.5rem;
+}
+
+.logo {
+  width: 64px;
+  height: 64px;
+}
+
+h1 {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.description {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
 }
 
 .add-form {
