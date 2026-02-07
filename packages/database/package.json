@@ -1,0 +1,30 @@
+{
+  "name": "@workspace/database",
+  "version": "1.0.0",
+  "description": "Shared database client and connection management for the workspace monorepo",
+  "type": "module",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.3.0",
+    "@prisma/client": "^7.3.0"
+  },
+  "devDependencies": {
+    "prisma": "^7.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

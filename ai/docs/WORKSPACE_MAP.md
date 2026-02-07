@@ -17,21 +17,21 @@ Currently, the `/apps` directory is empty, serving as a target for scaffolded pr
 
 These are the "Gold Master" blueprints used to create new applications.
 
-| Template                 | Type            | Stack                               | Status                               |
-| :----------------------- | :-------------- | :---------------------------------- | :----------------------------------- |
-| `landing-page`           | Client only     | Vue 3 + Vite + Pinia + Vue Router   | Builds, 1 test passing               |
-| `api-server`             | Server only     | Express v5 + tsx (minimal UI)       | Builds, 3 tests passing              |
-| `client-server`          | Client + Server | Express v5 + vanilla TS client      | Builds, 14 tests passing             |
-| `client-server-database` | Full Stack + DB | Client + Server + Prisma + Postgres | Builds (Prisma/Postgres integration) |
+| Template                 | Type            | Stack                               | Status                   |
+| :----------------------- | :-------------- | :---------------------------------- | :----------------------- |
+| `landing-page`           | Client only     | Vue 3 + Vite + Pinia + Vue Router   | Builds, 1 test passing   |
+| `api-server`             | Server only     | Express v5 + tsx (minimal UI)       | Builds, 3 tests passing  |
+| `client-server`          | Client + Server | Express v5 + vanilla TS client      | Builds, 14 tests passing |
+| `client-server-database` | Full Stack + DB | Client + Server + Prisma + Postgres | Builds, 16 tests passing |
 
 ## Packages (`/packages`)
 
 These are internal shared libraries consumed by applications and other packages.
 
-| Package    | Name                  | Purpose                                 | Status                                               |
-| :--------- | :-------------------- | :-------------------------------------- | :--------------------------------------------------- |
-| `utils`    | `@workspace/utils`    | Shared utility functions (e.g., log)    | Stable, in use                                       |
-| `database` | `@workspace/database` | Shared Prisma client and base DB config | Planned (see `ai/docs/architectural-constraints.md`) |
+| Package    | Name                  | Purpose                                 | Status                            |
+| :--------- | :-------------------- | :-------------------------------------- | :-------------------------------- |
+| `utils`    | `@workspace/utils`    | Shared utility functions (e.g., log)    | Stable, in use                    |
+| `database` | `@workspace/database` | Shared Prisma client and base DB config | Stable, in use (11 tests passing) |
 
 ## Future Additions
 

@@ -28,12 +28,14 @@
     "build:template:client-server-database": "turbo build --filter=client-server-database",
     "build:template:landing-page": "turbo build --filter=landing-page",
     "build:utils": "turbo build --filter=@workspace/utils",
+    "build:database": "turbo build --filter=@workspace/database",
     "test": "vitest --run",
     "test:coverage": "vitest run --coverage",
     "test:api-server": "vitest --run --project api-server",
     "test:landing-page": "vitest --run --project landing-page",
     "test:client-server": "vitest --run --project client-server",
     "test:client-server-database": "vitest --run --project client-server-database",
+    "test:database": "vitest --run --project database",
     "lint": "turbo lint",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -46,12 +48,15 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
     ]
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
-    "@types/node": "^22.10.5",
+    "@types/node": "^24.10.4",
     "@vitejs/plugin-vue": "^6.0.3",
     "@vitest/coverage-v8": "^4.0.18",
     "concurrently": "^9.1.2",

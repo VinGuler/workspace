@@ -11,7 +11,9 @@
       "Bash(npm --version)",
       "Bash(npx vitest:*)",
       "Bash(npx turbo build:*)",
-      "Bash(npx turbo lint:*)"
+      "Bash(npx turbo lint:*)",
+      "WebSearch",
+      "WebFetch(domain:www.prisma.io)"
     ]
   }
 }

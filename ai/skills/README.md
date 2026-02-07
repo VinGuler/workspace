@@ -6,10 +6,20 @@ This directory is intended to house definitions and documentation for various "s
 
 Skills enable the AI agent to perform sophisticated operations, such as scaffolding new projects, extracting standalone applications, or performing codebase refactorings, by providing structured inputs and expected outputs for these automated processes.
 
-## Key Skills (Planned/Implemented)
+## Key Skills
 
-- **Exporter**: A skill to "flatten" an application from the monorepo into a standalone repository, bundling its internal dependencies and preparing it for independent deployment or sharing (e.g., as a home assignment).
-- **Scaffolder**: A skill designed to generate new projects within the `/apps` directory based on the "Gold Master" templates located in `/templates`. It handles copying the template and initial configuration.
+### Operational
+
+- **[Testing](./testing.md)**: Run unit and integration tests (Vitest) for the full workspace or specific projects.
+- **[Build](./build.md)**: Compile all packages and applications via Turborepo with caching.
+- **[Lint & Format](./lint-format.md)**: Enforce code quality (ESLint) and formatting (Prettier).
+- **[Dev](./dev.md)**: Launch applications in development mode with hot-reloading.
+- **[Database](./database.md)**: Manage PostgreSQL instances, Prisma schemas, migrations, and seeding.
+
+### Workflow
+
+- **[Scaffolder](./scaffolder.md)**: Generate new projects in `/apps` from `/templates` blueprints.
+- **[Exporter](./exporter.md)**: Flatten an app into a standalone repository for sharing or deployment.
 
 ## How to Document a Skill
 

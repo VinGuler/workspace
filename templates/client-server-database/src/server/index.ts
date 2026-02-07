@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import express, { type Express } from 'express';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { log } from '@workspace/utils';
+import { getDatabaseUrl, createClient, checkHealth } from '@workspace/database';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -9,62 +11,75 @@ const __dirname = dirname(__filename);
 const app: Express = express();
 const PORT = process.env.PORT || 3003;
 
+// Database setup
+const DB_NAME = 'client_server_database_db';
+const databaseUrl = process.env.DATABASE_URL ?? getDatabaseUrl(DB_NAME);
+const prisma = createClient(databaseUrl);
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// In-memory data store
-const todos: { id: number; text: string; completed: boolean }[] = [
-  { id: 1, text: 'Learn TypeScript', completed: true },
-  { id: 2, text: 'Build a full-stack app', completed: false },
-];
-let nextId = 3;
-
-// API routes
-app.get('/api/todos', (req, res) => {
-  res.json({ success: true, data: todos });
+// Health check endpoint
+app.get('/api/health', async (_req, res) => {
+  const healthy = await checkHealth(prisma);
+  res.status(healthy ? 200 : 503).json({ success: healthy, status: healthy ? 'ok' : 'unhealthy' });
 });
 
-app.post('/api/todos', (req, res) => {
+// API routes
+app.get('/api/todos', async (_req, res) => {
+  try {
+    const todos = await prisma.todo.findMany({ orderBy: { createdAt: 'asc' } });
+    res.json({ success: true, data: todos });
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
+});
+
+app.post('/api/todos', async (req, res) => {
   const { text } = req.body;
   if (!text) {
     return res.status(400).json({ success: false, error: 'Text is required' });
   }
 
-  const newTodo = {
-    id: nextId++,
-    text,
-    completed: false,
-  };
-  todos.push(newTodo);
-  res.json({ success: true, data: newTodo });
+  try {
+    const todo = await prisma.todo.create({ data: { text } });
+    res.json({ success: true, data: todo });
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message });
+  }
 });
 
-app.put('/api/todos/:id', (req, res) => {
+app.put('/api/todos/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   const { completed } = req.body;
 
-  const todo = todos.find((t) => t.id === id);
-  if (!todo) {
-    return res.status(404).json({ success: false, error: 'Todo not found' });
+  try {
+    const todo = await prisma.todo.update({
+      where: { id },
+      data: typeof completed === 'boolean' ? { completed } : {},
+    });
+    res.json({ success: true, data: todo });
+  } catch (err) {
+    if ((err as any).code === 'P2025') {
+      return res.status(404).json({ success: false, error: 'Todo not found' });
+    }
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
-
-  if (typeof completed === 'boolean') {
-    todo.completed = completed;
-  }
-  res.json({ success: true, data: todo });
 });
 
-app.delete('/api/todos/:id', (req, res) => {
+app.delete('/api/todos/:id', async (req, res) => {
   const id = parseInt(req.params.id);
-  const index = todos.findIndex((t) => t.id === id);
 
-  if (index === -1) {
-    return res.status(404).json({ success: false, error: 'Todo not found' });
+  try {
+    await prisma.todo.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    if ((err as any).code === 'P2025') {
+      return res.status(404).json({ success: false, error: 'Todo not found' });
+    }
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
-
-  todos.splice(index, 1);
-  res.json({ success: true });
 });
 
 // Serve Vite build output with SPA fallback
@@ -84,8 +99,8 @@ app.use((err: Error, req: express.Request, res: express.Response) => {
   });
 });
 
-// Export app for testing
-export { app };
+// Export for testing
+export { app, prisma };
 
 // Start server only if not imported
 if (import.meta.url === `file://${process.argv[1]}`) {

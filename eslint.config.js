@@ -8,7 +8,7 @@ import globals from 'globals';
 /**
  * Add server apps when we add them
  */
-const serverApps = ['templates/api-server/**/*.ts'];
+const serverApps = ['templates/api-server/**/*.ts', 'packages/database/**/*.ts'];
 
 export default [
   // Global ignores

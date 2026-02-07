@@ -16,6 +16,7 @@
     { "path": "./templates/api-server" },
     { "path": "./templates/client-server" },
     { "path": "./templates/client-server-database" },
-    { "path": "./packages/utils" }
+    { "path": "./packages/utils" },
+    { "path": "./packages/database" }
   ]
 }

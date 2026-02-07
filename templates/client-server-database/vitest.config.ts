@@ -9,5 +9,6 @@ export default defineConfig({
     root: fileURLToPath(new URL('./', import.meta.url)),
     include: ['src/**/*.{test,spec}.{js,ts}'],
     exclude: [...configDefaults.exclude, 'dist/**'],
+    setupFiles: ['src/__tests__/setup.ts'],
   },
 });

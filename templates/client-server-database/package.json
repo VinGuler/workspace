@@ -8,15 +8,23 @@
     "dev": "run-p dev:server dev:client",
     "dev:server": "tsx watch --clear-screen=false src/server/index.ts",
     "dev:client": "vite",
-    "build": "run-p build:server build:client",
+    "build": "prisma generate && run-p build:server build:client",
     "build:server": "tsc -p tsconfig.server.json",
     "build:client": "vite build",
     "start": "node dist/server/index.js",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@prisma/client": "^7.3.0",
+    "@workspace/database": "workspace:*",
     "@workspace/utils": "workspace:*",
+    "dotenv": "^16.5.0",
     "express": "^5.0.1",
     "pinia": "^3.0.4",
     "vue": "^3.5.26"
@@ -33,6 +41,7 @@
     "@vue/tsconfig": "^0.8.1",
     "jsdom": "^27.4.0",
     "npm-run-all2": "^8.0.4",
+    "prisma": "^7.3.0",
     "supertest": "^7.2.2",
     "tsx": "^4.19.2",
     "typescript": "~5.9.3",
