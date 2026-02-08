@@ -195,6 +195,8 @@ AI agents can leverage the following operational workflows:
 - **Workflow**: Set up PostgreSQL (Docker), provision DBs, generate Prisma client, push schema, create/apply migrations, seed data, open Prisma Studio.
 - **Usage Examples**:
   - `docker run ... postgres:16-alpine` (start PostgreSQL)
+  - `pnpm run db:up` (start or create & start local PostgreSQL container)
+  - `pnpm run db:down` (stop local PostgreSQL container)
   - `docker exec ... "CREATE DATABASE <app_db_name>;"`
   - `cd <app-dir> && npx prisma generate`
   - `cd <app-dir> && npx prisma migrate dev --name <migration-name>`

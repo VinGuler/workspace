@@ -40,6 +40,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "db:up": "docker ps -a --filter 'name=workspace-postgres' --format '{{.ID}}' | grep -q . && docker start workspace-postgres || docker run -d --name workspace-postgres -e POSTGRES_USER=workspace -e POSTGRES_PASSWORD=workspace_dev -e POSTGRES_DB=postgres -p 5432:5432 postgres:16-alpine",
+    "db:down": "docker stop workspace-postgres",
     "prepare": "husky"
   },
   "lint-staged": {
