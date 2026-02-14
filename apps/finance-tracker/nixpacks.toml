@@ -1,6 +1,5 @@
-# Nixpacks configuration template for Railway monorepo deployments
-# Copy this file to each app directory: apps/<app-name>/nixpacks.toml
-# Railway reads nixpacks.toml from the Root Directory setting
+# Nixpacks configuration for Railway
+# Configures pnpm for monorepo workspace support and prevents npm usage
 
 [phases.setup]
 nixPkgs = ["nodejs_20"]
@@ -10,7 +9,7 @@ cmds = [
 ]
 
 [phases.install]
-# Install from monorepo root to get all workspace dependencies
+# Explicitly handle pnpm install from monorepo root to avoid npm
 dependsOn = ["setup"]
 cmds = ["cd ../.. && pnpm install --frozen-lockfile"]
 

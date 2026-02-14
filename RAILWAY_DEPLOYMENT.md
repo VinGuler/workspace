@@ -99,29 +99,31 @@ railway up
 
 To add a new app to Railway:
 
-1. **Copy the template**:
+1. **Copy the configuration templates**:
 
    ```bash
    cp railway.template.json apps/your-new-app/railway.json
+   cp nixpacks.toml apps/your-new-app/nixpacks.toml
    ```
 
-2. **Update APP_NAME placeholders**:
+2. **Update watchPatterns in railway.json**:
 
    ```json
    // In apps/your-new-app/railway.json
-   "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && cd apps/your-new-app && pnpm run build",
    "watchPatterns": ["apps/your-new-app/**", "packages/**"]
    ```
+
+   No need to change buildCommand - it works as-is!
 
 3. **Create a new Railway Service**:
    - Go to your Railway Project
    - Click "New" → "GitHub Repo" (same repo)
    - Set **Root Directory**: `apps/your-new-app`
-   - Railway will auto-detect `railway.json`
+   - Railway will auto-detect both `railway.json` and `nixpacks.toml`
 
 4. **Configure environment variables** (per service)
 
-5. **Deploy** - Each service deploys independently
+5. **Deploy** - Each service deploys independently with pnpm ✅
 
 **Result**: Multiple apps in one Railway Project, sharing the monorepo but deployed separately.
 
@@ -139,13 +141,15 @@ Per-app configuration file:
 
 Template for creating new apps. Copy to each new app directory.
 
-### `nixpacks.toml`
+### `nixpacks.toml` (per-app)
 
-Root-level Nixpacks configuration:
+**Important**: Each app needs its own `nixpacks.toml` in `apps/<app-name>/`:
 
-- Enables Corepack to respect `packageManager` field in package.json
-- Prevents Railway from using npm (which doesn't support `workspace:*`)
-- Configures pnpm@10.5.2 for monorepo support
+- Railway reads this from the Root Directory setting
+- Enables Corepack to respect `packageManager` field
+- Prevents npm usage (which doesn't support `workspace:*`)
+- Installs dependencies from monorepo root with pnpm
+- Copy from root `nixpacks.toml` template when creating new apps
 
 ### `package.json` (root)
 
@@ -288,11 +292,13 @@ Railway pricing: https://railway.app/pricing
 cd apps
 cp -r ../templates/client-server-database my-new-app
 
-# 2. Set up Railway config
+# 2. Set up Railway config files
 cp ../railway.template.json my-new-app/railway.json
+cp ../nixpacks.toml my-new-app/nixpacks.toml
 
-# 3. Update railway.json (replace APP_NAME with my-new-app)
+# 3. Update watchPatterns in railway.json
 # Edit: apps/my-new-app/railway.json
+# Change "apps/APP_NAME/**" to "apps/my-new-app/**"
 
 # 4. Commit and push
 git add apps/my-new-app
