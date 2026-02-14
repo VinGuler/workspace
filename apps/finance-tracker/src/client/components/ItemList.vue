@@ -52,7 +52,7 @@ function isOverdue(item: Item): boolean {
       v-for="item in sortedItems"
       :key="item.id"
       :class="[
-        'bg-slate-900 rounded-xl border p-4 flex items-center justify-between transition-all',
+        'bg-slate-900 rounded-xl border p-4 flex flex-col items-start gap-4 transition-all',
         item.isPaid
           ? 'border-slate-800 opacity-50'
           : isOverdue(item)
@@ -60,26 +60,7 @@ function isOverdue(item: Item): boolean {
             : 'border-slate-800',
       ]"
     >
-      <div class="flex items-center gap-3 flex-1 min-w-0">
-        <!-- Paid checkbox -->
-        <input
-          type="checkbox"
-          :checked="item.isPaid"
-          class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500/50 cursor-pointer"
-          :disabled="!canEdit"
-          @change="$emit('toggle-paid', item.id)"
-        />
-
-        <!-- Type badge -->
-        <span
-          :class="[
-            'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap',
-            typeBadgeClass(item.type),
-          ]"
-        >
-          {{ ITEM_TYPE_LABELS[item.type] }}
-        </span>
-
+      <div class="flex gap-3 w-full min-w-0">
         <!-- Label -->
         <span
           :class="[
@@ -89,27 +70,17 @@ function isOverdue(item: Item): boolean {
         >
           {{ item.label }}
         </span>
-      </div>
-
-      <div class="flex items-center gap-4 ml-4 shrink-0">
-        <!-- Amount -->
+        <!-- Type badge -->
         <span
           :class="[
-            'font-semibold tabular-nums',
-            ITEM_TYPE_IS_INCOME[item.type] ? 'text-emerald-400' : 'text-rose-400',
-            item.isPaid ? 'line-through opacity-50' : '',
+            'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap',
+            typeBadgeClass(item.type),
           ]"
         >
-          {{ ITEM_TYPE_IS_INCOME[item.type] ? '+' : '-' }}{{ formatAmount(item.amount) }}
+          {{ ITEM_TYPE_LABELS[item.type] }}
         </span>
-
-        <!-- Day badge -->
-        <span class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-md whitespace-nowrap">
-          Day {{ item.dayOfMonth }}
-        </span>
-
         <!-- Edit/Delete buttons -->
-        <div v-if="canEdit" class="flex items-center gap-1">
+        <div v-if="canEdit" class="flex items-center gap-1 ml-auto">
           <button
             class="p-1 text-slate-500 hover:text-violet-400 transition-colors"
             title="Edit item"
@@ -139,6 +110,35 @@ function isOverdue(item: Item): boolean {
             </svg>
           </button>
         </div>
+      </div>
+
+      <div class="flex items-center gap-4 w-full">
+        <!-- Paid checkbox -->
+        <input
+          type="checkbox"
+          :checked="item.isPaid"
+          class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500/50 cursor-pointer"
+          :disabled="!canEdit"
+          @change="$emit('toggle-paid', item.id)"
+        />
+
+        <!-- Amount -->
+        <span
+          :class="[
+            'font-semibold tabular-nums',
+            ITEM_TYPE_IS_INCOME[item.type] ? 'text-emerald-400' : 'text-rose-400',
+            item.isPaid ? 'line-through opacity-50' : '',
+          ]"
+        >
+          {{ ITEM_TYPE_IS_INCOME[item.type] ? '+' : '-' }}{{ formatAmount(item.amount) }}
+        </span>
+
+        <!-- Day badge -->
+        <span
+          class="ml-auto text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-md whitespace-nowrap"
+        >
+          Day {{ item.dayOfMonth }}
+        </span>
 
         <!-- Paid checkmark for non-editable -->
         <span v-if="item.isPaid && !canEdit" class="text-emerald-400 text-lg">&#10003;</span>

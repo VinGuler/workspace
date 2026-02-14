@@ -176,7 +176,7 @@ onMounted(() => {
     <EmptyState v-else-if="store.isEmpty" @add-item="openAddItem" />
 
     <!-- Active cycle -->
-    <div v-else>
+    <div>
       <!-- Balance cards -->
       <BalanceCards
         v-if="store.balanceCards"
