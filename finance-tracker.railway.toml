@@ -1,18 +1,18 @@
-# railway.toml
 [build]
-builder = "RAILPACK" # Railpack is the newer, faster replacement for Nixpacks
+builder = "RAILPACK" # Use the latest builder
 
 [build.setup]
-# Explicitly generate Prisma client before the build starts
+# Force pnpm and a modern node version via nixPkgs
+nixPkgs = ["nodejs_22", "pnpm"]
+# Generate Prisma before building
 commands = ["pnpm --filter finance-tracker exec prisma generate"]
 
 [deploy]
-# Using your specific root-level scripts
 buildCommand = "pnpm build:app:finance-tracker"
 startCommand = "pnpm start:app:finance-tracker"
 
 [environments]
-# Ensure we are in the monorepo root
 RAILWAY_ROOT_DIRECTORY = "/"
-# Additional hint for the package manager
+# These are redundant but helpful "hammers" to ensure the builder obeys
+NIXPACKS_NODE_VERSION = "22"
 PACKAGE_MANAGER = "pnpm"
