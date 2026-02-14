@@ -1,22 +1,18 @@
+# railway.toml
 [build]
-builder = "NIXPACKS"
-# Force pnpm and node installation
-nixpacksPlanConfig = { providers = ["node"], node = { packageManager = "pnpm" } }
-
-# ONLY trigger a build if these folders change
-watchPatterns = [
-  "apps/finance-tracker/**",
-  "packages/**",
-  "pnpm-lock.yaml",
-  "package.json"
-]
+builder = "RAILPACK" # Railpack is the newer, faster replacement for Nixpacks
 
 [build.setup]
-# Run Prisma generate specifically for this app before building
-# We use --filter to ensure it targets the right package.json
+# Explicitly generate Prisma client before the build starts
 commands = ["pnpm --filter finance-tracker exec prisma generate"]
 
 [deploy]
-# Use your root-level scripts as requested
+# Using your specific root-level scripts
 buildCommand = "pnpm build:app:finance-tracker"
 startCommand = "pnpm start:app:finance-tracker"
+
+[environments]
+# Ensure we are in the monorepo root
+RAILWAY_ROOT_DIRECTORY = "/"
+# Additional hint for the package manager
+PACKAGE_MANAGER = "pnpm"
