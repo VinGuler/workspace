@@ -21,8 +21,7 @@
       "dependsOn": ["^build"]
     },
     "db:generate": {
-      "cache": false,
-      "env": ["DATABASE_URL"]
+      "cache": true
     }
   }
 }
