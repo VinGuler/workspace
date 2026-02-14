@@ -139,6 +139,21 @@ Per-app configuration file:
 
 Template for creating new apps. Copy to each new app directory.
 
+### `nixpacks.toml`
+
+Root-level Nixpacks configuration:
+
+- Enables Corepack to respect `packageManager` field in package.json
+- Prevents Railway from using npm (which doesn't support `workspace:*`)
+- Configures pnpm@10.5.2 for monorepo support
+
+### `package.json` (root)
+
+Root package.json includes:
+
+- `"packageManager": "pnpm@10.5.2"` - Specifies pnpm version (used by Corepack)
+- `"engines"` - Node and pnpm version requirements
+
 ### `railway.env.example`
 
 Template for required environment variables (at root for reference).

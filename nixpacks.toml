@@ -1,0 +1,18 @@
+# Nixpacks configuration for Railway
+# Configures pnpm for monorepo workspace support and prevents npm usage
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+cmds = [
+  "corepack enable",
+  "corepack prepare pnpm@10.5.2 --activate"
+]
+
+[phases.install]
+# Let railway.json buildCommand handle the install to support monorepo structure
+dependsOn = ["setup"]
+cmds = []
+
+[start]
+# Start command is defined per-app in railway.json
+cmd = "echo 'See railway.json for startCommand'"
