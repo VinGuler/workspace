@@ -1,0 +1,22 @@
+[build]
+builder = "NIXPACKS"
+# Force pnpm and node installation
+nixpacksPlanConfig = { providers = ["node"], node = { packageManager = "pnpm" } }
+
+# ONLY trigger a build if these folders change
+watchPatterns = [
+  "apps/finance-tracker/**",
+  "packages/**",
+  "pnpm-lock.yaml",
+  "package.json"
+]
+
+[build.setup]
+# Run Prisma generate specifically for this app before building
+# We use --filter to ensure it targets the right package.json
+commands = ["pnpm --filter finance-tracker exec prisma generate"]
+
+[deploy]
+# Use your root-level scripts as requested
+buildCommand = "pnpm build:app:finance-tracker"
+startCommand = "pnpm start:app:finance-tracker"
