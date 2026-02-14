@@ -146,9 +146,9 @@ Template for creating new apps. Copy to each new app directory.
 **Important**: Each app needs its own `nixpacks.toml` in `apps/<app-name>/`:
 
 - Railway reads this from the Root Directory setting
-- Enables Corepack to respect `packageManager` field
-- Prevents npm usage (which doesn't support `workspace:*`)
-- Installs dependencies from monorepo root with pnpm
+- Installs pnpm via Nix packages (avoids npm entirely)
+- Prevents `workspace:*` protocol errors
+- Runs `pnpm install` from monorepo root for all workspace dependencies
 - Copy from root `nixpacks.toml` template when creating new apps
 
 ### `package.json` (root)

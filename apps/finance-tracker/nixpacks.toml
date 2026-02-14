@@ -2,14 +2,10 @@
 # Configures pnpm for monorepo workspace support and prevents npm usage
 
 [phases.setup]
-nixPkgs = ["nodejs_20"]
-cmds = [
-  "corepack enable",
-  "corepack prepare pnpm@10.5.2 --activate"
-]
+nixPkgs = ["nodejs_20", "pnpm"]
 
 [phases.install]
-# Explicitly handle pnpm install from monorepo root to avoid npm
+# Install from monorepo root with pnpm (avoids npm workspace: protocol error)
 dependsOn = ["setup"]
 cmds = ["cd ../.. && pnpm install --frozen-lockfile"]
 

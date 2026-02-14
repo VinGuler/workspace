@@ -3,11 +3,7 @@
 # Railway reads nixpacks.toml from the Root Directory setting
 
 [phases.setup]
-nixPkgs = ["nodejs_20"]
-cmds = [
-  "corepack enable",
-  "corepack prepare pnpm@10.5.2 --activate"
-]
+nixPkgs = ["nodejs_20", "pnpm"]
 
 [phases.install]
 # Install from monorepo root to get all workspace dependencies
