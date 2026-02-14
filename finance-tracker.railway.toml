@@ -1,17 +1,17 @@
 [build]
 builder = "RAILPACK"
-# Setting root here tells the builder where the context is
-rootDirectory = "/" 
+# Crucial: Keep root at / so all node_modules are accessible
+rootDirectory = "/"
 
 [build.setup]
-# Force the specific Nix packages for Prisma 6 compatibility
-nixPkgs = ["nodejs_22", "pnpm"]
-commands = ["pnpm --filter finance-tracker exec prisma generate"]
+# 1. Install everything
+# 2. Generate the client from the app's schema
+# 3. This makes the types available for the shared packages to use
+commands = [
+  "pnpm install",
+  "pnpm --filter finance-tracker exec prisma generate"
+]
 
 [deploy]
-# Your root-level scripts
 buildCommand = "pnpm build:app:finance-tracker"
 startCommand = "pnpm start:app:finance-tracker"
-
-# If you want to define variables in TOML, use a custom table or set them in the UI
-# But DO NOT use [environments] as a simple list.
