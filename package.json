@@ -29,6 +29,7 @@
     "dev:template:landing-page": "turbo dev --filter=landing-page",
     "build": "turbo build",
     "build:app:finance-tracker": "turbo build --filter=finance-tracker",
+    "build:app:finance-tracker:railway": "cd apps/finance-tracker && pnpm run db:generate && cd ../.. && turbo build --filter=finance-tracker",
     "build:utils": "turbo build --filter=@workspace/utils",
     "build:database": "turbo build --filter=@workspace/database",
     "start:app:finance-tracker": "turbo start --filter=finance-tracker",
