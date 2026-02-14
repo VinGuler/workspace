@@ -12,7 +12,7 @@ workspace/
 │   ├── finance-tracker/        ← Deployable app (has railway.json)
 │   └── your-next-app/          ← Future apps go here
 ├── packages/                   ← Shared code (@workspace/*)
-└── railway.template.json       ← Template for new apps
+
 ```
 
 **Key points:**
@@ -97,7 +97,7 @@ railway up
 
 ## Deploying Multiple Apps
 
-**Current Setup**: Single `railway.json` + `nixpacks.toml` at root for finance-tracker.
+**Current Setup**: Each app (e.g., `finance-tracker`) contains its own `railway.json` and `nixpacks.toml` for dedicated configuration.
 
 To add more apps, you'll need to:
 
@@ -123,37 +123,27 @@ To add more apps, you'll need to:
 
 ## Configuration Files
 
-### `railway.json` (root)
+### `apps/<app-name>/railway.json`
 
-Monorepo-level Railway configuration:
+Each app directory (e.g., `apps/finance-tracker/`) contains its own `railway.json`:
 
-- Sets watch patterns to trigger rebuilds on app/package changes
-- Configures healthcheck endpoint and restart policy
-- Railway reads this from the repository root
+- Defines `watchPatterns` relative to the app directory (e.g., `./**` for app code, `../../packages/**` for shared packages).
+- Configures healthcheck endpoint, restart policy, and other deployment-specific settings for the individual service.
 
-### `nixpacks.toml` (root)
+### `apps/<app-name>/nixpacks.toml`
 
-Nixpacks build configuration:
+Each app directory also contains its own `nixpacks.toml`:
 
-- Installs pnpm via Nix packages (avoids npm entirely)
-- Runs `pnpm install` from monorepo root (supports `workspace:*`)
-- Builds the finance-tracker app (`cd apps/finance-tracker && pnpm run build`)
-- Starts the app (`cd apps/finance-tracker && pnpm start`)
-
-### `railway.template.json`
-
-Legacy template - not currently used with root-based deployment
+- Specifies `nodejs` and `pnpm` as Nix packages.
+- Defines build commands (e.g., `pnpm run db:generate`, `pnpm run build`) and start commands (e.g., `pnpm start`) that run from within the app's directory.
+- Relies on Railway's automatic root-level `pnpm install` for monorepo workspace dependencies.
 
 ### `package.json` (root)
 
-Root package.json includes:
+Root `package.json` includes:
 
 - `"packageManager": "pnpm@10.5.2"` - Specifies pnpm version (used by Corepack)
 - `"engines"` - Node and pnpm version requirements
-
-### `railway.env.example`
-
-Template for required environment variables (at root for reference).
 
 ## Database Migrations
 
@@ -208,18 +198,15 @@ pnpm run db:migrate
 
 ## Build Process
 
-Railway builds from the monorepo root:
+Railway detects `railway.json` and `nixpacks.toml` within your chosen app directory (e.g., `apps/finance-tracker/`). The build process will then be tailored to that specific app:
 
-1. Installs all pnpm workspace dependencies (including `@workspace/*` packages)
-2. Changes to app directory (`cd apps/<app-name>`)
-3. Generates Prisma client (`pnpm run db:generate`)
-4. Builds server + client (`pnpm run build`)
-5. Starts with `node dist/server/index.js`
+1.  Railway installs all pnpm workspace dependencies from the monorepo root (based on `pnpm-workspace.yaml`).
+2.  Nixpacks executes commands defined in `apps/<app-name>/nixpacks.toml` (e.g., `pnpm run db:generate`, `pnpm run build`, `pnpm start`) from within the app's directory.
 
-**Watch Patterns**: Rebuilds trigger on changes to:
+**Watch Patterns**: Rebuilds are triggered based on the `watchPatterns` defined in `apps/<app-name>/railway.json`, typically including:
 
-- `apps/<app-name>/**` (your app code)
-- `packages/**` (shared workspace dependencies)
+- `./**` (your app code within its directory)
+- `../../packages/**` (shared workspace dependencies)
 
 ## Troubleshooting
 
@@ -280,26 +267,24 @@ Railway pricing: https://railway.app/pricing
 
 ## Quick Reference: Deployment
 
-```bash
-# Current setup: Deploy finance-tracker from monorepo root
+# Current setup: Deploy finance-tracker (or any other app)
 
 # 1. In Railway Dashboard:
-#    - Root Directory: (empty)
-#    - Connects to main branch
-#    - Reads railway.json and nixpacks.toml from root
+
+# - Select the specific app directory (e.g., `apps/finance-tracker/`) as the Root Directory.
+
+# - Connects to main branch
+
+# - Railway will automatically detect `railway.json` and `nixpacks.toml` within the specified app directory.
 
 # 2. Environment Variables:
+
 railway variables set JWT_SECRET=$(openssl rand -base64 32)
 railway variables set NODE_ENV=production
 
 # 3. Deploy:
-git push  # Auto-deploys on push to main
 
-# To deploy a different app:
-# - Update nixpacks.toml [phases.build] and [start] sections
-# - Update railway.json watchPatterns
-# - Commit and push
-```
+git push # Auto-deploys on push to main
 
 **Result**: Each app deploys independently with its own:
 

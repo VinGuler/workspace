@@ -5,17 +5,12 @@
 [phases.setup]
 nixPkgs = ["nodejs", "pnpm"]
 
-[phases.install]
-dependsOn = ["setup"]
-cmds = ["pnpm install --frozen-lockfile"]
-
 [phases.build]
 dependsOn = ["install"]
 cmds = [
-  "cd apps/finance-tracker",
   "pnpm run db:generate",
   "pnpm run build"
 ]
 
 [start]
-cmd = "cd apps/finance-tracker && pnpm start"
+cmd = "pnpm start"
