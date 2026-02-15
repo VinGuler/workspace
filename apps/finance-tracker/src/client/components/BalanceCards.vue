@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t, locale } = useI18n();
+
 defineProps<{
   currentBalance: number;
   expectedBalance: number;
@@ -11,7 +15,7 @@ defineEmits<{
 }>();
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale.value, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
@@ -22,13 +26,13 @@ function formatNumber(value: number): string {
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
     <!-- Current Balance -->
     <div class="bg-emerald-950/40 border border-emerald-800/40 rounded-xl p-4">
-      <p class="text-sm font-medium text-emerald-400 mb-1">Current Balance</p>
+      <p class="text-sm font-medium text-emerald-400 mb-1">{{ t('balance.current') }}</p>
       <div class="flex items-center gap-2">
         <p class="text-2xl font-bold text-emerald-300">{{ formatNumber(currentBalance) }}</p>
         <button
           v-if="canEdit"
           class="text-emerald-500 hover:text-emerald-300 transition-colors"
-          title="Edit balance"
+          :title="t('balance.editBalance')"
           @click="$emit('update-balance')"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -45,7 +49,7 @@ function formatNumber(value: number): string {
 
     <!-- Expected Balance -->
     <div class="bg-sky-950/40 border border-sky-800/40 rounded-xl p-4">
-      <p class="text-sm font-medium text-sky-400 mb-1">Expected Balance</p>
+      <p class="text-sm font-medium text-sky-400 mb-1">{{ t('balance.expected') }}</p>
       <p class="text-2xl font-bold text-sky-300">{{ formatNumber(expectedBalance) }}</p>
     </div>
 
@@ -64,7 +68,7 @@ function formatNumber(value: number): string {
           deficitExcess >= 0 ? 'text-emerald-400' : 'text-rose-400',
         ]"
       >
-        {{ deficitExcess >= 0 ? 'Surplus' : 'Deficit' }}
+        {{ deficitExcess >= 0 ? t('balance.surplus') : t('balance.deficit') }}
       </p>
       <p :class="['text-2xl font-bold', deficitExcess >= 0 ? 'text-emerald-300' : 'text-rose-300']">
         {{ formatNumber(Math.abs(deficitExcess)) }}

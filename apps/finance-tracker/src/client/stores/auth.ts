@@ -78,6 +78,25 @@ export const useAuthStore = defineStore('auth', () => {
     await router.push('/login');
   }
 
+  async function resetPassword(username: string, newPassword: string): Promise<boolean> {
+    loading.value = true;
+    error.value = null;
+
+    const result = await api('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ username, newPassword }),
+    });
+
+    if (!result.success) {
+      error.value = result.error || 'Password reset failed';
+      loading.value = false;
+      return false;
+    }
+
+    loading.value = false;
+    return true;
+  }
+
   return {
     user,
     isChecked,
@@ -88,5 +107,6 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logout,
+    resetPassword,
   };
 });

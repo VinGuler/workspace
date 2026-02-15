@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useSharingStore } from '@/stores/sharing';
 import { RouterLink } from 'vue-router';
 import type { Permission } from '@/types';
 
+const { t } = useI18n();
 const sharing = useSharingStore();
 
 function permissionBadgeClass(permission: Permission): string {
@@ -18,7 +20,6 @@ function permissionBadgeClass(permission: Permission): string {
 }
 
 async function leaveWorkspace(workspaceId: string) {
-  // Remove self from the shared workspace
   const result = await fetch(`/api/sharing/leave`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -37,9 +38,9 @@ onMounted(() => {
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-xl font-semibold text-slate-100">Shared Workspaces</h2>
+      <h2 class="text-xl font-semibold text-slate-100">{{ t('sharedWorkspaces.title') }}</h2>
       <RouterLink to="/" class="text-sm text-violet-400 hover:text-violet-300 font-medium">
-        Back to My Workspace
+        {{ t('sharedWorkspaces.backToMyWorkspace') }}
       </RouterLink>
     </div>
 
@@ -48,7 +49,7 @@ onMounted(() => {
       <div
         class="w-8 h-8 border-4 border-slate-700 border-t-violet-500 rounded-full animate-spin mx-auto mb-3"
       ></div>
-      <p class="text-slate-400">Loading shared workspaces...</p>
+      <p class="text-slate-400">{{ t('sharedWorkspaces.loading') }}</p>
     </div>
 
     <!-- Empty state -->
@@ -57,9 +58,9 @@ onMounted(() => {
       class="text-center py-16 bg-slate-900 rounded-xl border border-slate-800"
     >
       <div class="text-4xl mb-3 text-slate-600">&#128101;</div>
-      <h3 class="text-lg font-medium text-slate-200 mb-1">No shared workspaces</h3>
+      <h3 class="text-lg font-medium text-slate-200 mb-1">{{ t('sharedWorkspaces.noShared') }}</h3>
       <p class="text-sm text-slate-400">
-        When someone shares their workspace with you, it will appear here.
+        {{ t('sharedWorkspaces.noSharedDescription') }}
       </p>
     </div>
 
@@ -72,7 +73,9 @@ onMounted(() => {
       >
         <div class="flex items-center gap-3">
           <div>
-            <p class="font-medium text-slate-200">{{ ws.ownerDisplayName }}'s Workspace</p>
+            <p class="font-medium text-slate-200">
+              {{ t('sharedWorkspaces.ownerWorkspace', { owner: ws.ownerDisplayName }) }}
+            </p>
             <span
               :class="[
                 'inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium',
@@ -88,13 +91,13 @@ onMounted(() => {
             :to="{ path: '/', query: { workspaceId: ws.workspaceId } }"
             class="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors"
           >
-            View
+            {{ t('sharedWorkspaces.view') }}
           </RouterLink>
           <button
             class="px-3 py-1.5 text-sm text-rose-400 border border-rose-800/50 rounded-lg hover:bg-rose-950/30 transition-colors"
             @click="leaveWorkspace(ws.workspaceId)"
           >
-            Leave
+            {{ t('sharedWorkspaces.leave') }}
           </button>
         </div>
       </div>

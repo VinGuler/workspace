@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { Member, Permission } from '@/types';
+
+const { t } = useI18n();
 
 defineProps<{
   members: Member[];
@@ -23,11 +26,8 @@ function permissionBadgeClass(permission: Permission): string {
 }
 
 function canRemove(member: Member, currentUserId: string, currentPermission: Permission): boolean {
-  // Cannot remove yourself
   if (member.userId === currentUserId) return false;
-  // Only owners can remove members
   if (currentPermission !== 'OWNER') return false;
-  // Cannot remove other owners
   if (member.permission === 'OWNER') return false;
   return true;
 }
@@ -64,11 +64,11 @@ function canRemove(member: Member, currentUserId: string, currentPermission: Per
         class="text-sm text-rose-400 hover:text-rose-300 transition-colors"
         @click="$emit('remove-member', member.userId)"
       >
-        Remove
+        {{ t('sharing.remove') }}
       </button>
     </div>
   </div>
   <p v-else class="mt-4 text-sm text-slate-500">
-    No members yet. Add someone to share your workspace.
+    {{ t('sharing.noMembers') }}
   </p>
 </template>

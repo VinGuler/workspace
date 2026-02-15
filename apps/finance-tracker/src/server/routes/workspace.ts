@@ -171,6 +171,39 @@ export function workspaceRouter(prisma: PrismaClient): Router {
     });
   });
 
+  // GET /api/workspace/cycles — fetch completed cycles for user's workspace
+  router.get('/cycles', async (req, res) => {
+    const userId = req.user!.id;
+
+    // Find user's OWNER workspace
+    const ownerEntry = await prisma.workspaceUser.findFirst({
+      where: { userId, permission: 'OWNER' },
+    });
+
+    if (!ownerEntry) {
+      res.status(404).json({ success: false, error: 'No workspace found' });
+      return;
+    }
+
+    const workspaceId = ownerEntry.workspaceId;
+
+    // Fetch all completed cycles for this workspace
+    const cycles = await prisma.completedCycle.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const formattedCycles = cycles.map((cycle) => ({
+      id: cycle.id,
+      cycleLabel: cycle.cycleLabel,
+      finalBalance: Number(cycle.finalBalance),
+      items: cycle.itemsSnapshot as any[],
+      createdAt: cycle.createdAt.toISOString(),
+    }));
+
+    res.json({ success: true, data: formattedCycles });
+  });
+
   // POST /api/workspace/reset — delete all items, reset balance to 0, clear cycle days
   router.post('/reset', async (req, res) => {
     const userId = req.user!.id;
@@ -202,7 +235,19 @@ export function workspaceRouter(prisma: PrismaClient): Router {
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.item.deleteMany({ where: { workspaceId } });
+      const workspace = await tx.workspace.findUnique({ where: { id: workspaceId } });
+      const items = await tx.item.findMany({ where: { workspaceId } });
+
+      const now = new Date();
+      await tx.completedCycle.create({
+        data: {
+          workspaceId,
+          finalBalance: workspace?.balance ?? 0,
+          cycleLabel: `${now.getMonth()} ${now.getFullYear()}`,
+          itemsSnapshot: items,
+        },
+      });
+      await tx.item.updateMany({ where: { workspaceId }, data: { isPaid: false } });
       await tx.workspace.update({
         where: { id: workspaceId },
         data: {

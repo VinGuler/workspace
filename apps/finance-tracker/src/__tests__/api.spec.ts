@@ -120,6 +120,56 @@ describe('Finance Tracker API', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
     });
+
+    it('POST /api/auth/reset-password resets user password', async () => {
+      await request(app)
+        .post('/api/auth/register')
+        .send({ username: 'resetuser', displayName: 'Reset User', password: 'oldpassword' });
+
+      const res = await request(app)
+        .post('/api/auth/reset-password')
+        .send({ username: 'resetuser', newPassword: 'newpassword123' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      // Verify old password no longer works
+      const oldLoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ username: 'resetuser', password: 'oldpassword' });
+
+      expect(oldLoginRes.status).toBe(401);
+
+      // Verify new password works
+      const newLoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ username: 'resetuser', password: 'newpassword123' });
+
+      expect(newLoginRes.status).toBe(200);
+      expect(newLoginRes.body.success).toBe(true);
+    });
+
+    it('POST /api/auth/reset-password returns 404 for non-existent user', async () => {
+      const res = await request(app)
+        .post('/api/auth/reset-password')
+        .send({ username: 'nonexistent', newPassword: 'newpassword123' });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Username not found');
+    });
+
+    it('POST /api/auth/reset-password validates password length', async () => {
+      await request(app)
+        .post('/api/auth/register')
+        .send({ username: 'shortpw', displayName: 'Short PW', password: 'password123' });
+
+      const res = await request(app)
+        .post('/api/auth/reset-password')
+        .send({ username: 'shortpw', newPassword: '12345' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Password must be at least 6 characters');
+    });
   });
 
   describe('Workspace', () => {
@@ -133,6 +183,42 @@ describe('Finance Tracker API', () => {
       expect(res.body.data.workspace).toBeDefined();
       expect(res.body.data.items).toEqual([]);
       expect(res.body.data.permission).toBe('OWNER');
+    });
+
+    it('GET /api/workspace/cycles returns empty list initially', async () => {
+      const { cookie } = await registerUser('cycleuser', 'Cycle User', 'password123');
+
+      const res = await request(app).get('/api/workspace/cycles').set('Cookie', cookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual([]);
+    });
+
+    it('GET /api/workspace/cycles returns completed cycles after reset', async () => {
+      const { cookie, workspaceId } = await registerUser('resetcycle', 'Reset User', 'password123');
+
+      // Create an item
+      await request(app).post('/api/items').set('Cookie', cookie).send({
+        workspaceId,
+        type: 'INCOME',
+        label: 'Salary',
+        amount: 5000,
+        dayOfMonth: 1,
+      });
+
+      // Reset workspace (this creates a completed cycle)
+      await request(app).post('/api/workspace/reset').set('Cookie', cookie).send({ workspaceId });
+
+      // Fetch completed cycles
+      const res = await request(app).get('/api/workspace/cycles').set('Cookie', cookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.data[0].items.length).toBe(1);
+      expect(res.body.data[0].items[0].label).toBe('Salary');
+      expect(res.body.data[0].finalBalance).toBe(0);
     });
 
     it('PUT /api/workspace/balance updates balance', async () => {

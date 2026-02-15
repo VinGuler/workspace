@@ -1,12 +1,32 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { api } from '@/composables/useApi';
+import { i18n } from '@/i18n';
 import type { WorkspaceData, Item, Permission, BalanceCards, CreateItemData } from '@/types';
 import { ITEM_TYPE_IS_INCOME } from '@/types';
+
+function buildCycleLabel(startDay: number, endDay: number): string {
+  const locale = i18n.global.locale.value;
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+
+  const startDate = new Date(year, month, startDay);
+  const fmt = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' });
+
+  if (endDay > startDay) {
+    const endDate = new Date(year, month, endDay);
+    return `${fmt.format(startDate)} - ${fmt.format(endDate)}`;
+  } else {
+    const endDate = new Date(year, month + 1, endDay);
+    return `${fmt.format(startDate)} - ${fmt.format(endDate)}`;
+  }
+}
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const workspace = ref<WorkspaceData | null>(null);
   const loading = ref(false);
+  const updating = ref(false);
   const error = ref<string | null>(null);
 
   const items = computed<Item[]>(() => workspace.value?.items ?? []);
@@ -32,6 +52,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const balanceCards = computed<BalanceCards | null>(() => workspace.value?.balanceCards ?? null);
 
+  const cycleLabel = computed(() => {
+    const ws = workspace.value;
+    if (!ws) return null;
+    const { cycleStartDay, cycleEndDay } = ws.workspace;
+    if (cycleStartDay != null && cycleEndDay != null) {
+      return buildCycleLabel(cycleStartDay, cycleEndDay);
+    }
+    return ws.cycleLabel ?? null;
+  });
+
   async function fetchWorkspace(workspaceId?: string) {
     loading.value = true;
     error.value = null;
@@ -52,6 +82,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!workspace.value) return;
 
     error.value = null;
+    updating.value = true;
     const result = await api('/api/workspace/balance', {
       method: 'PUT',
       body: JSON.stringify({ workspaceId: workspace.value.workspace.id, balance }),
@@ -62,10 +93,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     } else {
       error.value = result.error || 'Failed to update balance';
     }
+    updating.value = false;
   }
 
   async function addItem(data: CreateItemData) {
     error.value = null;
+    updating.value = true;
     const result = await api('/api/items', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -76,6 +109,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     } else {
       error.value = result.error || 'Failed to add item';
     }
+    updating.value = false;
   }
 
   async function updateItem(
@@ -83,6 +117,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     data: Partial<Pick<Item, 'label' | 'amount' | 'dayOfMonth' | 'type'>>
   ) {
     error.value = null;
+    updating.value = true;
     const result = await api(`/api/items/${itemId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -93,10 +128,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     } else {
       error.value = result.error || 'Failed to update item';
     }
+    updating.value = false;
   }
 
   async function deleteItem(itemId: string) {
     error.value = null;
+    updating.value = true;
     const result = await api(`/api/items/${itemId}`, {
       method: 'DELETE',
     });
@@ -106,25 +143,50 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     } else {
       error.value = result.error || 'Failed to delete item';
     }
+    updating.value = false;
   }
 
   async function togglePaid(itemId: string) {
     error.value = null;
-    const result = await api(`/api/items/${itemId}/toggle-paid`, {
+    updating.value = true;
+
+    if (workspace.value) {
+      const itemIndex = workspace.value.items.findIndex((i) => String(i.id) === String(itemId));
+      if (itemIndex === -1 || !workspace.value.items[itemIndex]) {
+        error.value = 'Item not found';
+        updating.value = false;
+        return;
+      }
+
+      workspace.value.items[itemIndex].isPaid = !workspace.value.items[itemIndex].isPaid;
+    }
+
+    const result = await api<Item>(`/api/items/${itemId}/toggle-paid`, {
       method: 'PATCH',
     });
 
-    if (result.success) {
-      await fetchWorkspace(workspace.value?.workspace.id);
+    if (result.success && result.data && workspace.value) {
+      const idx = workspace.value.items.findIndex((i) => String(i.id) === String(itemId));
+      if (idx !== -1) {
+        workspace.value.items.splice(idx, 1, result.data);
+      }
+      const wsResult = await api<WorkspaceData>(
+        `/api/workspace?workspaceId=${workspace.value.workspace.id}`
+      );
+      if (wsResult.success && wsResult.data) {
+        workspace.value.balanceCards = wsResult.data.balanceCards;
+      }
     } else {
       error.value = result.error || 'Failed to toggle paid status';
     }
+    updating.value = false;
   }
 
   async function resetWorkspace() {
     if (!workspace.value) return;
 
     error.value = null;
+    updating.value = true;
     const result = await api('/api/workspace/reset', {
       method: 'POST',
       body: JSON.stringify({ workspaceId: workspace.value.workspace.id }),
@@ -135,11 +197,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     } else {
       error.value = result.error || 'Failed to reset workspace';
     }
+    updating.value = false;
   }
 
   return {
     workspace,
     loading,
+    updating,
     error,
     items,
     incomeItems,
@@ -149,6 +213,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     permission,
     canEdit,
     balanceCards,
+    cycleLabel,
     fetchWorkspace,
     updateBalance,
     addItem,

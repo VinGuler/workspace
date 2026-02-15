@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useSharingStore } from '@/stores/sharing';
@@ -10,8 +11,10 @@ import ItemForm from '@/components/ItemForm.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import MemberList from '@/components/MemberList.vue';
 import AddMemberForm from '@/components/AddMemberForm.vue';
+import UpdatingBar from '@/components/UpdatingBar.vue';
 import type { Item } from '@/types';
 
+const { t } = useI18n();
 const route = useRoute();
 const store = useWorkspaceStore();
 const sharing = useSharingStore();
@@ -22,6 +25,7 @@ const editingItem = ref<Item | undefined>(undefined);
 const showResetConfirm = ref(false);
 const editingBalance = ref(false);
 const balanceInput = ref('');
+const confirmPaidItem = ref<Item | null>(null);
 
 const workspaceId = computed(() => (route.query.workspaceId as string) || undefined);
 
@@ -63,8 +67,24 @@ async function handleDeleteItem(itemId: string) {
   await store.deleteItem(itemId);
 }
 
-async function handleTogglePaid(itemId: string) {
-  await store.togglePaid(itemId);
+function handleTogglePaid(itemId: string) {
+  const item = store.items.find((i) => String(i.id) === String(itemId));
+  if (item && !item.isPaid) {
+    confirmPaidItem.value = item;
+  } else {
+    store.togglePaid(itemId);
+  }
+}
+
+async function confirmMarkPaid() {
+  if (!confirmPaidItem.value) return;
+  const id = confirmPaidItem.value.id;
+  confirmPaidItem.value = null;
+  await store.togglePaid(id);
+}
+
+function cancelMarkPaid() {
+  confirmPaidItem.value = null;
 }
 
 function startBalanceEdit() {
@@ -124,7 +144,7 @@ onMounted(() => {
       <div
         class="w-8 h-8 border-4 border-slate-700 border-t-violet-500 rounded-full animate-spin mx-auto mb-3"
       ></div>
-      <p class="text-slate-400">Loading workspace...</p>
+      <p class="text-slate-400">{{ t('workspace.loading') }}</p>
     </div>
   </div>
 
@@ -135,39 +155,42 @@ onMounted(() => {
       class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors"
       @click="loadWorkspace"
     >
-      Retry
+      {{ t('workspace.retry') }}
     </button>
   </div>
 
   <!-- Workspace loaded -->
-  <div v-else-if="store.workspace">
+  <div v-else-if="store.workspace" :class="{ 'pointer-events-none': store.updating }">
+    <UpdatingBar :visible="store.updating" />
     <!-- Shared workspace banner -->
     <div
       v-if="isSharedView"
       class="mb-4 px-4 py-2 bg-violet-950/30 border border-violet-800/30 rounded-lg text-sm text-violet-300"
     >
-      You are viewing a shared workspace ({{ store.permission }})
+      {{ t('workspace.sharedBanner', { permission: store.permission }) }}
     </div>
 
     <!-- Cycle label -->
     <div class="mb-6">
-      <h2 class="text-xl font-semibold text-slate-100">{{ store.workspace.cycleLabel }}</h2>
+      <h2 class="text-xl font-semibold text-slate-100">{{ store.cycleLabel }}</h2>
     </div>
 
     <!-- All paid / between cycles state -->
     <div v-if="store.allPaid" class="mb-6">
       <div class="bg-emerald-950/30 border border-emerald-800/30 rounded-xl p-6 text-center">
         <div class="text-3xl mb-2">&#10003;</div>
-        <h3 class="text-lg font-semibold text-emerald-300 mb-1">Cycle Complete</h3>
+        <h3 class="text-lg font-semibold text-emerald-300 mb-1">
+          {{ t('workspace.cycleComplete') }}
+        </h3>
         <p class="text-emerald-400/70 text-sm">
-          All items have been marked as paid. You can reset the workspace to start a new cycle.
+          {{ t('workspace.cycleCompleteDescription') }}
         </p>
         <button
           v-if="store.canEdit"
           class="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors"
           @click="showResetConfirm = true"
         >
-          Reset for New Cycle
+          {{ t('workspace.resetForNewCycle') }}
         </button>
       </div>
     </div>
@@ -176,7 +199,7 @@ onMounted(() => {
     <EmptyState v-else-if="store.isEmpty" @add-item="openAddItem" />
 
     <!-- Active cycle -->
-    <div>
+    <div v-if="!store.isEmpty">
       <!-- Balance cards -->
       <BalanceCards
         v-if="store.balanceCards"
@@ -195,7 +218,9 @@ onMounted(() => {
         <div
           class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/40 p-6 w-full max-w-sm mx-4"
         >
-          <h3 class="text-lg font-semibold text-slate-100 mb-4">Update Current Balance</h3>
+          <h3 class="text-lg font-semibold text-slate-100 mb-4">
+            {{ t('workspace.updateBalance') }}
+          </h3>
           <input
             v-model="balanceInput"
             type="number"
@@ -208,13 +233,13 @@ onMounted(() => {
               class="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
               @click="cancelBalanceEdit"
             >
-              Cancel
+              {{ t('common.cancel') }}
             </button>
             <button
               class="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors"
               @click="saveBalance"
             >
-              Save
+              {{ t('common.save') }}
             </button>
           </div>
         </div>
@@ -226,7 +251,7 @@ onMounted(() => {
           class="w-full py-3 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 hover:border-violet-500/50 hover:text-violet-400 transition-colors font-medium"
           @click="openAddItem"
         >
-          + Add Item
+          {{ t('items.addItem') }}
         </button>
       </div>
 
@@ -245,7 +270,7 @@ onMounted(() => {
 
     <!-- Sharing section (only for owners) -->
     <div v-if="store.permission === 'OWNER'" class="mt-8 border-t border-slate-800 pt-6">
-      <h3 class="text-lg font-semibold text-slate-100 mb-4">Sharing</h3>
+      <h3 class="text-lg font-semibold text-slate-100 mb-4">{{ t('sharing.title') }}</h3>
 
       <AddMemberForm
         :workspace-id="store.workspace.workspace.id"
@@ -262,6 +287,36 @@ onMounted(() => {
       />
     </div>
 
+    <!-- Mark as paid confirmation modal -->
+    <div
+      v-if="confirmPaidItem"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+      @click.self="cancelMarkPaid"
+    >
+      <div
+        class="bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-xl shadow-2xl shadow-black/40 p-6 w-full sm:max-w-sm sm:mx-4"
+      >
+        <h3 class="text-lg font-semibold text-slate-100 mb-1">{{ t('workspace.markAsPaid') }}</h3>
+        <p class="text-sm text-slate-400 mb-4">
+          {{ t('workspace.markAsPaidDescription', { label: confirmPaidItem.label }) }}
+        </p>
+        <div class="flex gap-3">
+          <button
+            class="flex-1 py-2.5 text-sm text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg transition-colors"
+            @click="cancelMarkPaid"
+          >
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            class="flex-1 py-2.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors font-medium"
+            @click="confirmMarkPaid"
+          >
+            {{ t('common.confirm') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Reset confirmation modal -->
     <div
       v-if="showResetConfirm"
@@ -270,22 +325,24 @@ onMounted(() => {
       <div
         class="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/40 p-6 w-full max-w-sm mx-4"
       >
-        <h3 class="text-lg font-semibold text-slate-100 mb-2">Reset Workspace?</h3>
+        <h3 class="text-lg font-semibold text-slate-100 mb-2">
+          {{ t('workspace.resetWorkspace') }}
+        </h3>
         <p class="text-sm text-slate-400 mb-4">
-          This will mark all items as unpaid and start a new cycle. This action cannot be undone.
+          {{ t('workspace.resetWorkspaceDescription') }}
         </p>
         <div class="flex justify-end gap-3">
           <button
             class="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
             @click="showResetConfirm = false"
           >
-            Cancel
+            {{ t('common.cancel') }}
           </button>
           <button
             class="px-4 py-2 text-sm bg-rose-600 text-white rounded-lg hover:bg-rose-500 transition-colors"
             @click="handleReset"
           >
-            Reset
+            {{ t('workspace.reset') }}
           </button>
         </div>
       </div>

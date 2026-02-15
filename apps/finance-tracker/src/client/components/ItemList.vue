@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Item } from '@/types';
-import { ITEM_TYPE_LABELS, ITEM_TYPE_IS_INCOME } from '@/types';
+import { ITEM_TYPE_IS_INCOME } from '@/types';
+
+const { t, locale } = useI18n();
 
 const props = defineProps<{
   items: Item[];
@@ -14,10 +17,10 @@ defineEmits<{
   delete: [itemId: string];
 }>();
 
-const sortedItems = computed(() => [...props.items].sort((a, b) => a.dayOfMonth - b.dayOfMonth));
+const sortedItems = computed(() => [...props.items].sort((a, b) => Number(a.id) - Number(b.id)));
 
 function formatAmount(value: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale.value, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
@@ -77,13 +80,13 @@ function isOverdue(item: Item): boolean {
             typeBadgeClass(item.type),
           ]"
         >
-          {{ ITEM_TYPE_LABELS[item.type] }}
+          {{ t('itemTypes.' + item.type) }}
         </span>
         <!-- Edit/Delete buttons -->
-        <div v-if="canEdit" class="flex items-center gap-1 ml-auto">
+        <div v-if="canEdit" class="flex items-center gap-1 ms-auto">
           <button
             class="p-1 text-slate-500 hover:text-violet-400 transition-colors"
-            title="Edit item"
+            :title="t('items.editItemAction')"
             @click="$emit('edit', item)"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +100,7 @@ function isOverdue(item: Item): boolean {
           </button>
           <button
             class="p-1 text-slate-500 hover:text-rose-400 transition-colors"
-            title="Delete item"
+            :title="t('items.deleteItemAction')"
             @click="$emit('delete', item.id)"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -135,9 +138,9 @@ function isOverdue(item: Item): boolean {
 
         <!-- Day badge -->
         <span
-          class="ml-auto text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-md whitespace-nowrap"
+          class="ms-auto text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded-md whitespace-nowrap"
         >
-          Day {{ item.dayOfMonth }}
+          {{ t('items.day', { day: item.dayOfMonth }) }}
         </span>
 
         <!-- Paid checkmark for non-editable -->

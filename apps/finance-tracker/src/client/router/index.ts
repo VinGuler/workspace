@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
       path: '/',
       name: 'workspace',
       component: () => import('@/views/WorkspaceView.vue'),
@@ -26,6 +32,12 @@ const router = createRouter({
       path: '/shared',
       name: 'shared',
       component: () => import('@/views/SharedWorkspacesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/cycles',
+      name: 'cycles',
+      component: () => import('@/views/CompletedCyclesView.vue'),
       meta: { requiresAuth: true },
     },
   ],

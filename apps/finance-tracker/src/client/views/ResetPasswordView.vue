@@ -8,11 +8,28 @@ const { t } = useI18n();
 const auth = useAuthStore();
 
 const username = ref('');
-const displayName = ref('');
-const password = ref('');
+const newPassword = ref('');
+const confirmPassword = ref('');
+const localError = ref<string | null>(null);
+const success = ref(false);
 
 async function handleSubmit() {
-  await auth.register(username.value, displayName.value, password.value);
+  localError.value = null;
+
+  if (newPassword.value !== confirmPassword.value) {
+    localError.value = t('auth.passwordsDoNotMatch');
+    return;
+  }
+
+  if (newPassword.value.length < 6) {
+    localError.value = t('auth.passwordTooShort');
+    return;
+  }
+
+  const result = await auth.resetPassword(username.value, newPassword.value);
+  if (result) {
+    success.value = true;
+  }
 }
 </script>
 
@@ -22,10 +39,24 @@ async function handleSubmit() {
       class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/30 p-8"
     >
       <h2 class="text-2xl font-bold text-center text-slate-100 mb-6">
-        {{ t('auth.createAccount') }}
+        {{ t('auth.resetPassword') }}
       </h2>
 
-      <form class="space-y-4" @submit.prevent="handleSubmit">
+      <div v-if="success" class="space-y-4">
+        <div class="p-4 bg-emerald-900/30 border border-emerald-700/50 rounded-lg">
+          <p class="text-emerald-400 text-center">
+            {{ t('auth.resetSuccess') }}
+          </p>
+        </div>
+        <RouterLink
+          to="/login"
+          class="block w-full py-2.5 px-4 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors text-center"
+        >
+          {{ t('auth.goToSignIn') }}
+        </RouterLink>
+      </div>
+
+      <form v-else class="space-y-4" @submit.prevent="handleSubmit">
         <div>
           <label for="username" class="block text-sm font-medium text-slate-300 mb-1">{{
             t('auth.username')
@@ -39,56 +70,58 @@ async function handleSubmit() {
             maxlength="30"
             autocomplete="username"
             class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
-            :placeholder="t('auth.chooseUsername')"
-          />
-          <p class="mt-1 text-xs text-slate-500">{{ t('auth.usernameHint') }}</p>
-        </div>
-
-        <div>
-          <label for="displayName" class="block text-sm font-medium text-slate-300 mb-1">{{
-            t('auth.displayName')
-          }}</label>
-          <input
-            id="displayName"
-            v-model="displayName"
-            type="text"
-            required
-            autocomplete="name"
-            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
-            :placeholder="t('auth.displayNamePlaceholder')"
+            :placeholder="t('auth.usernamePlaceholder')"
           />
         </div>
 
         <div>
-          <label for="password" class="block text-sm font-medium text-slate-300 mb-1">{{
-            t('auth.password')
+          <label for="newPassword" class="block text-sm font-medium text-slate-300 mb-1">{{
+            t('auth.newPassword')
           }}</label>
           <input
-            id="password"
-            v-model="password"
+            id="newPassword"
+            v-model="newPassword"
             type="password"
             required
             minlength="6"
             autocomplete="new-password"
             class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
-            :placeholder="t('auth.createPassword')"
+            :placeholder="t('auth.newPasswordPlaceholder')"
           />
           <p class="mt-1 text-xs text-slate-500">{{ t('auth.passwordHint') }}</p>
         </div>
 
-        <p v-if="auth.error" class="text-sm text-rose-400">{{ auth.error }}</p>
+        <div>
+          <label for="confirmPassword" class="block text-sm font-medium text-slate-300 mb-1">{{
+            t('auth.confirmPassword')
+          }}</label>
+          <input
+            id="confirmPassword"
+            v-model="confirmPassword"
+            type="password"
+            required
+            minlength="6"
+            autocomplete="new-password"
+            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
+            :placeholder="t('auth.confirmPasswordPlaceholder')"
+          />
+        </div>
+
+        <p v-if="localError || auth.error" class="text-sm text-rose-400">
+          {{ localError || auth.error }}
+        </p>
 
         <button
           type="submit"
           :disabled="auth.loading"
           class="w-full py-2.5 px-4 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {{ auth.loading ? t('auth.creatingAccount') : t('auth.createAccount') }}
+          {{ auth.loading ? t('auth.resettingPassword') : t('auth.resetPassword') }}
         </button>
       </form>
 
       <p class="mt-6 text-center text-sm text-slate-400">
-        {{ t('auth.hasAccount') }}
+        {{ t('auth.rememberPassword') }}
         <RouterLink to="/login" class="text-violet-400 hover:text-violet-300 font-medium">{{
           t('auth.signInLink')
         }}</RouterLink>

@@ -57,6 +57,14 @@ export interface CreateItemData {
   dayOfMonth: number;
 }
 
+export interface CompletedCycle {
+  id: string;
+  cycleLabel: string;
+  finalBalance: number;
+  items: Item[];
+  createdAt: string;
+}
+
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   INCOME: 'Income',
   CREDIT_CARD: 'Credit Card',

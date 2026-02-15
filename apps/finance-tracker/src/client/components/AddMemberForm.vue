@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useSharingStore } from '@/stores/sharing';
 import type { Permission } from '@/types';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   workspaceId: string;
@@ -35,14 +38,14 @@ async function handleAdd() {
 
 <template>
   <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-    <h4 class="text-sm font-medium text-slate-300 mb-3">Add Member</h4>
+    <h4 class="text-sm font-medium text-slate-300 mb-3">{{ t('sharing.addMember') }}</h4>
 
     <!-- Search -->
     <div class="flex gap-2 mb-3">
       <input
         v-model="searchUsername"
         type="text"
-        placeholder="Search by username"
+        :placeholder="t('sharing.searchPlaceholder')"
         class="flex-1 px-3 py-2 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
         @input="handleSearchInputChange"
         @keyup.enter="handleSearch"
@@ -52,7 +55,7 @@ async function handleAdd() {
         :disabled="sharing.loading"
         @click="handleSearch"
       >
-        Search
+        {{ t('sharing.search') }}
       </button>
     </div>
 
@@ -75,15 +78,15 @@ async function handleAdd() {
           v-model="selectedPermission"
           class="px-2 py-1 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
         >
-          <option value="MEMBER">Member</option>
-          <option value="VIEWER">Viewer</option>
+          <option value="MEMBER">{{ t('sharing.member') }}</option>
+          <option value="VIEWER">{{ t('sharing.viewer') }}</option>
         </select>
         <button
           class="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-500 transition-colors"
           :disabled="sharing.loading"
           @click="handleAdd"
         >
-          Add
+          {{ t('sharing.add') }}
         </button>
       </div>
     </div>

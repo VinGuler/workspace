@@ -170,5 +170,38 @@ export function authRouter(prisma: PrismaClient): Router {
     });
   });
 
+  // POST /api/auth/reset-password
+  router.post('/reset-password', async (req, res) => {
+    const { username, newPassword } = req.body;
+
+    if (!username || typeof username !== 'string') {
+      res.status(400).json({ success: false, error: 'Username is required' });
+      return;
+    }
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      res.status(400).json({
+        success: false,
+        error: 'Password must be at least 6 characters',
+      });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Username not found' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    res.json({ success: true });
+  });
+
   return router;
 }

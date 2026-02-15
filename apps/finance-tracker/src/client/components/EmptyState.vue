@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineEmits<{
   'add-item': [];
 }>();
@@ -21,15 +25,15 @@ defineEmits<{
         />
       </svg>
     </div>
-    <h3 class="text-lg font-medium text-slate-200 mb-2">No items yet</h3>
+    <h3 class="text-lg font-medium text-slate-200 mb-2">{{ t('items.noItems') }}</h3>
     <p class="text-sm text-slate-400 mb-6 max-w-sm mx-auto">
-      Start by adding your salary, bills, and recurring payments to track your monthly finances.
+      {{ t('items.noItemsDescription') }}
     </p>
     <button
       class="px-6 py-2.5 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors"
       @click="$emit('add-item')"
     >
-      Add Your First Item
+      {{ t('items.addFirstItem') }}
     </button>
   </div>
 </template>
