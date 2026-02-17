@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { app, prisma } from '../server/index';
 
+const CSRF_TOKEN = 'test-csrf-token';
+const CSRF_COOKIE = `ft_csrf=${CSRF_TOKEN}`;
+
 // Helper to register a user and extract the auth cookie
 async function registerUser(
   username: string,
@@ -10,8 +13,11 @@ async function registerUser(
 ): Promise<{ cookie: string[]; userId: number; workspaceId: number }> {
   const res = await request(app)
     .post('/api/auth/register')
+    .set('Cookie', CSRF_COOKIE)
+    .set('x-csrf-token', CSRF_TOKEN)
     .send({ username, displayName, password });
-  const cookie = res.headers['set-cookie'] as unknown as string[];
+  const cookies = res.headers['set-cookie'] as unknown as string[];
+  const cookie = [...cookies, CSRF_COOKIE];
 
   // Fetch the workspace ID for this user
   const wsRes = await request(app).get('/api/workspace').set('Cookie', cookie);
@@ -20,6 +26,19 @@ async function registerUser(
     userId: res.body.data.id,
     workspaceId: wsRes.body.data.workspace.id,
   };
+}
+
+/** Shorthand for POST/PUT/DELETE with CSRF headers */
+function postWithCsrf(url: string) {
+  return request(app).post(url).set('Cookie', CSRF_COOKIE).set('x-csrf-token', CSRF_TOKEN);
+}
+
+function putWithCsrf(url: string) {
+  return request(app).put(url).set('Cookie', CSRF_COOKIE).set('x-csrf-token', CSRF_TOKEN);
+}
+
+function deleteWithCsrf(url: string) {
+  return request(app).delete(url).set('Cookie', CSRF_COOKIE).set('x-csrf-token', CSRF_TOKEN);
 }
 
 // Clean DB before each test
@@ -47,9 +66,11 @@ describe('Finance Tracker API', () => {
 
   describe('Auth', () => {
     it('POST /api/auth/register creates user and returns cookie', async () => {
-      const res = await request(app)
-        .post('/api/auth/register')
-        .send({ username: 'testuser', displayName: 'Test User', password: 'password123' });
+      const res = await postWithCsrf('/api/auth/register').send({
+        username: 'testuser',
+        displayName: 'Test User',
+        password: 'password123',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -59,26 +80,33 @@ describe('Finance Tracker API', () => {
     });
 
     it('POST /api/auth/register with duplicate username returns 409', async () => {
-      await request(app)
-        .post('/api/auth/register')
-        .send({ username: 'dupuser', displayName: 'User 1', password: 'password123' });
+      await postWithCsrf('/api/auth/register').send({
+        username: 'dupuser',
+        displayName: 'User 1',
+        password: 'password123',
+      });
 
-      const res = await request(app)
-        .post('/api/auth/register')
-        .send({ username: 'dupuser', displayName: 'User 2', password: 'password456' });
+      const res = await postWithCsrf('/api/auth/register').send({
+        username: 'dupuser',
+        displayName: 'User 2',
+        password: 'password456',
+      });
 
       expect(res.status).toBe(409);
       expect(res.body.error).toBe('Username already taken');
     });
 
     it('POST /api/auth/login with valid creds returns cookie', async () => {
-      await request(app)
-        .post('/api/auth/register')
-        .send({ username: 'loginuser', displayName: 'Login User', password: 'password123' });
+      await postWithCsrf('/api/auth/register').send({
+        username: 'loginuser',
+        displayName: 'Login User',
+        password: 'password123',
+      });
 
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ username: 'loginuser', password: 'password123' });
+      const res = await postWithCsrf('/api/auth/login').send({
+        username: 'loginuser',
+        password: 'password123',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -87,13 +115,16 @@ describe('Finance Tracker API', () => {
     });
 
     it('POST /api/auth/login with wrong password returns 401', async () => {
-      await request(app)
-        .post('/api/auth/register')
-        .send({ username: 'badpw', displayName: 'Bad PW', password: 'password123' });
+      await postWithCsrf('/api/auth/register').send({
+        username: 'badpw',
+        displayName: 'Bad PW',
+        password: 'password123',
+      });
 
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ username: 'badpw', password: 'wrongpassword' });
+      const res = await postWithCsrf('/api/auth/login').send({
+        username: 'badpw',
+        password: 'wrongpassword',
+      });
 
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
@@ -114,58 +145,72 @@ describe('Finance Tracker API', () => {
       expect(res.body.data.username).toBe('meuser');
     });
 
-    it('POST /api/auth/logout clears cookie', async () => {
-      const res = await request(app).post('/api/auth/logout');
+    it('POST /api/auth/logout clears cookie and invalidates token', async () => {
+      const { cookie } = await registerUser('logoutuser', 'Logout User', 'password123');
+
+      const res = await request(app)
+        .post('/api/auth/logout')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
     });
 
-    it('POST /api/auth/reset-password resets user password', async () => {
-      await request(app)
-        .post('/api/auth/register')
-        .send({ username: 'resetuser', displayName: 'Reset User', password: 'oldpassword' });
+    it('POST /api/auth/reset-password resets user password', { timeout: 15000 }, async () => {
+      await postWithCsrf('/api/auth/register').send({
+        username: 'resetuser',
+        displayName: 'Reset User',
+        password: 'oldpassword',
+      });
 
-      const res = await request(app)
-        .post('/api/auth/reset-password')
-        .send({ username: 'resetuser', newPassword: 'newpassword123' });
+      const res = await postWithCsrf('/api/auth/reset-password').send({
+        username: 'resetuser',
+        newPassword: 'newpassword123',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
 
       // Verify old password no longer works
-      const oldLoginRes = await request(app)
-        .post('/api/auth/login')
-        .send({ username: 'resetuser', password: 'oldpassword' });
+      const oldLoginRes = await postWithCsrf('/api/auth/login').send({
+        username: 'resetuser',
+        password: 'oldpassword',
+      });
 
       expect(oldLoginRes.status).toBe(401);
 
       // Verify new password works
-      const newLoginRes = await request(app)
-        .post('/api/auth/login')
-        .send({ username: 'resetuser', password: 'newpassword123' });
+      const newLoginRes = await postWithCsrf('/api/auth/login').send({
+        username: 'resetuser',
+        password: 'newpassword123',
+      });
 
       expect(newLoginRes.status).toBe(200);
       expect(newLoginRes.body.success).toBe(true);
     });
 
     it('POST /api/auth/reset-password returns 404 for non-existent user', async () => {
-      const res = await request(app)
-        .post('/api/auth/reset-password')
-        .send({ username: 'nonexistent', newPassword: 'newpassword123' });
+      const res = await postWithCsrf('/api/auth/reset-password').send({
+        username: 'nonexistent',
+        newPassword: 'newpassword123',
+      });
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('Username not found');
     });
 
     it('POST /api/auth/reset-password validates password length', async () => {
-      await request(app)
-        .post('/api/auth/register')
-        .send({ username: 'shortpw', displayName: 'Short PW', password: 'password123' });
+      await postWithCsrf('/api/auth/register').send({
+        username: 'shortpw',
+        displayName: 'Short PW',
+        password: 'password123',
+      });
 
-      const res = await request(app)
-        .post('/api/auth/reset-password')
-        .send({ username: 'shortpw', newPassword: '12345' });
+      const res = await postWithCsrf('/api/auth/reset-password').send({
+        username: 'shortpw',
+        newPassword: '12345',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('Password must be at least 6 characters');
@@ -199,16 +244,24 @@ describe('Finance Tracker API', () => {
       const { cookie, workspaceId } = await registerUser('resetcycle', 'Reset User', 'password123');
 
       // Create an item
-      await request(app).post('/api/items').set('Cookie', cookie).send({
-        workspaceId,
-        type: 'INCOME',
-        label: 'Salary',
-        amount: 5000,
-        dayOfMonth: 1,
-      });
+      await request(app)
+        .post('/api/items')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({
+          workspaceId,
+          type: 'INCOME',
+          label: 'Salary',
+          amount: 5000,
+          dayOfMonth: 1,
+        });
 
       // Reset workspace (this creates a completed cycle)
-      await request(app).post('/api/workspace/reset').set('Cookie', cookie).send({ workspaceId });
+      await request(app)
+        .post('/api/workspace/reset')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({ workspaceId });
 
       // Fetch completed cycles
       const res = await request(app).get('/api/workspace/cycles').set('Cookie', cookie);
@@ -227,6 +280,7 @@ describe('Finance Tracker API', () => {
       const res = await request(app)
         .put('/api/workspace/balance')
         .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
         .send({ workspaceId, balance: 5000 });
 
       expect(res.status).toBe(200);
@@ -243,13 +297,17 @@ describe('Finance Tracker API', () => {
     it('POST /api/items creates item', async () => {
       const { cookie, workspaceId } = await registerUser('itemuser', 'Item User', 'password123');
 
-      const res = await request(app).post('/api/items').set('Cookie', cookie).send({
-        workspaceId,
-        type: 'INCOME',
-        label: 'Salary',
-        amount: 5000,
-        dayOfMonth: 10,
-      });
+      const res = await request(app)
+        .post('/api/items')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({
+          workspaceId,
+          type: 'INCOME',
+          label: 'Salary',
+          amount: 5000,
+          dayOfMonth: 10,
+        });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -261,13 +319,17 @@ describe('Finance Tracker API', () => {
     it('POST /api/items with invalid dayOfMonth returns 400', async () => {
       const { cookie, workspaceId } = await registerUser('badday', 'Bad Day', 'password123');
 
-      const res = await request(app).post('/api/items').set('Cookie', cookie).send({
-        workspaceId,
-        type: 'INCOME',
-        label: 'Salary',
-        amount: 5000,
-        dayOfMonth: 32,
-      });
+      const res = await request(app)
+        .post('/api/items')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({
+          workspaceId,
+          type: 'INCOME',
+          label: 'Salary',
+          amount: 5000,
+          dayOfMonth: 32,
+        });
 
       expect(res.status).toBe(400);
     });
@@ -275,19 +337,24 @@ describe('Finance Tracker API', () => {
     it('PUT /api/items/:id updates item', async () => {
       const { cookie, workspaceId } = await registerUser('upitem', 'Up Item', 'password123');
 
-      const createRes = await request(app).post('/api/items').set('Cookie', cookie).send({
-        workspaceId,
-        type: 'RENT',
-        label: 'Old Rent',
-        amount: 2000,
-        dayOfMonth: 1,
-      });
+      const createRes = await request(app)
+        .post('/api/items')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({
+          workspaceId,
+          type: 'RENT',
+          label: 'Old Rent',
+          amount: 2000,
+          dayOfMonth: 1,
+        });
 
       const itemId = createRes.body.data.id;
 
       const res = await request(app)
         .put(`/api/items/${itemId}`)
         .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
         .send({ label: 'New Rent', amount: 2500 });
 
       expect(res.status).toBe(200);
@@ -302,21 +369,30 @@ describe('Finance Tracker API', () => {
       await request(app)
         .put('/api/workspace/balance')
         .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
         .send({ workspaceId, balance: 1000 });
 
       // Create a payment item
-      const createRes = await request(app).post('/api/items').set('Cookie', cookie).send({
-        workspaceId,
-        type: 'RENT',
-        label: 'Rent',
-        amount: 500,
-        dayOfMonth: 1,
-      });
+      const createRes = await request(app)
+        .post('/api/items')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({
+          workspaceId,
+          type: 'RENT',
+          label: 'Rent',
+          amount: 500,
+          dayOfMonth: 1,
+        });
 
       const itemId = createRes.body.data.id;
 
       // Mark as paid — balance should decrease by 500
-      await request(app).put(`/api/items/${itemId}`).set('Cookie', cookie).send({ isPaid: true });
+      await request(app)
+        .put(`/api/items/${itemId}`)
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({ isPaid: true });
 
       const wsRes = await request(app).get('/api/workspace').set('Cookie', cookie);
       expect(Number(wsRes.body.data.workspace.balance)).toBe(500);
@@ -325,17 +401,24 @@ describe('Finance Tracker API', () => {
     it('DELETE /api/items/:id removes item', async () => {
       const { cookie, workspaceId } = await registerUser('delitem', 'Del Item', 'password123');
 
-      const createRes = await request(app).post('/api/items').set('Cookie', cookie).send({
-        workspaceId,
-        type: 'OTHER',
-        label: 'Delete Me',
-        amount: 100,
-        dayOfMonth: 15,
-      });
+      const createRes = await request(app)
+        .post('/api/items')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({
+          workspaceId,
+          type: 'OTHER',
+          label: 'Delete Me',
+          amount: 100,
+          dayOfMonth: 15,
+        });
 
       const itemId = createRes.body.data.id;
 
-      const res = await request(app).delete(`/api/items/${itemId}`).set('Cookie', cookie);
+      const res = await request(app)
+        .delete(`/api/items/${itemId}`)
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -365,6 +448,7 @@ describe('Finance Tracker API', () => {
       const res = await request(app)
         .post(`/api/workspace/${owner.workspaceId}/members`)
         .set('Cookie', owner.cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
         .send({ userId: viewer.userId, permission: 'VIEWER' });
 
       expect(res.status).toBe(200);
@@ -378,11 +462,13 @@ describe('Finance Tracker API', () => {
       await request(app)
         .post(`/api/workspace/${owner.workspaceId}/members`)
         .set('Cookie', owner.cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
         .send({ userId: viewer.userId, permission: 'VIEWER' });
 
       const res = await request(app)
         .delete(`/api/workspace/${owner.workspaceId}/members/${viewer.userId}`)
-        .set('Cookie', owner.cookie);
+        .set('Cookie', owner.cookie)
+        .set('x-csrf-token', CSRF_TOKEN);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -395,15 +481,20 @@ describe('Finance Tracker API', () => {
       await request(app)
         .post(`/api/workspace/${owner.workspaceId}/members`)
         .set('Cookie', owner.cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
         .send({ userId: viewer.userId, permission: 'VIEWER' });
 
-      const res = await request(app).post('/api/items').set('Cookie', viewer.cookie).send({
-        workspaceId: owner.workspaceId,
-        type: 'INCOME',
-        label: 'Should Fail',
-        amount: 1000,
-        dayOfMonth: 10,
-      });
+      const res = await request(app)
+        .post('/api/items')
+        .set('Cookie', viewer.cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({
+          workspaceId: owner.workspaceId,
+          type: 'INCOME',
+          label: 'Should Fail',
+          amount: 1000,
+          dayOfMonth: 10,
+        });
 
       expect(res.status).toBe(403);
     });

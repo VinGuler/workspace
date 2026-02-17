@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { PrismaClient } from '@workspace/database';
-import { requireAuth } from '../middleware/auth.js';
+import { createRequireAuth } from '../middleware/auth.js';
 import { calculateCycleDays } from '../services/cycle.js';
+import { strictParseInt } from '../utils/parseId.js';
 
 const VALID_ITEM_TYPES = ['INCOME', 'CREDIT_CARD', 'LOAN_PAYMENT', 'RENT', 'OTHER'];
 
@@ -38,6 +39,7 @@ async function recalculateAndUpdateCycleDays(
 
 export function itemsRouter(prisma: PrismaClient): Router {
   const router = Router();
+  const requireAuth = createRequireAuth(prisma);
 
   // All routes require authentication
   router.use(requireAuth);
@@ -111,7 +113,7 @@ export function itemsRouter(prisma: PrismaClient): Router {
   // PUT /api/items/:id — update an item
   router.put('/:id', async (req, res) => {
     const userId = req.user!.id;
-    const itemId = parseInt(req.params.id, 10);
+    const itemId = strictParseInt(req.params.id);
 
     if (isNaN(itemId)) {
       res.status(400).json({ success: false, error: 'Invalid item id' });
@@ -232,7 +234,7 @@ export function itemsRouter(prisma: PrismaClient): Router {
   // PATCH /api/items/:id/toggle-paid — toggle an item's paid status
   router.patch('/:id/toggle-paid', async (req, res) => {
     const userId = req.user!.id;
-    const itemId = parseInt(req.params.id, 10);
+    const itemId = strictParseInt(req.params.id);
 
     if (isNaN(itemId)) {
       res.status(400).json({ success: false, error: 'Invalid item id' });
@@ -298,7 +300,7 @@ export function itemsRouter(prisma: PrismaClient): Router {
   // DELETE /api/items/:id — delete an item
   router.delete('/:id', async (req, res) => {
     const userId = req.user!.id;
-    const itemId = parseInt(req.params.id, 10);
+    const itemId = strictParseInt(req.params.id);
 
     if (isNaN(itemId)) {
       res.status(400).json({ success: false, error: 'Invalid item id' });

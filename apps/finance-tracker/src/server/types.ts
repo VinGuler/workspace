@@ -1,6 +1,7 @@
 export interface JwtPayload {
   id: number;
   username: string;
+  tokenVersion: number;
 }
 
 export interface BalanceCards {

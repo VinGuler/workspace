@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@workspace/database';
-import { requireAuth } from '../middleware/auth.js';
+import { createRequireAuth } from '../middleware/auth.js';
 import {
   calculateCycleDays,
   calculateBalanceCards,
@@ -8,10 +8,12 @@ import {
   buildWorkspaceCycleLabel,
 } from '../services/cycle.js';
 import { archiveCycleIfNeeded } from '../services/cycle.js';
+import { strictParseInt } from '../utils/parseId.js';
 import type { WorkspaceResponse } from '../types.js';
 
 export function workspaceRouter(prisma: PrismaClient): Router {
   const router = Router();
+  const requireAuth = createRequireAuth(prisma);
 
   // All routes require authentication
   router.use(requireAuth);
@@ -22,7 +24,7 @@ export function workspaceRouter(prisma: PrismaClient): Router {
     let workspaceId: number | undefined;
 
     if (req.query.workspaceId) {
-      workspaceId = parseInt(req.query.workspaceId as string, 10);
+      workspaceId = strictParseInt(req.query.workspaceId as string);
       if (isNaN(workspaceId)) {
         res.status(400).json({ success: false, error: 'Invalid workspaceId' });
         return;
@@ -213,7 +215,7 @@ export function workspaceRouter(prisma: PrismaClient): Router {
   // DELETE /api/workspace/cycles/:id — delete a completed cycle
   router.delete('/cycles/:id', async (req, res) => {
     const userId = req.user!.id;
-    const cycleId = parseInt(req.params.id, 10);
+    const cycleId = strictParseInt(req.params.id);
 
     if (isNaN(cycleId)) {
       res.status(400).json({ success: false, error: 'Invalid cycle ID' });

@@ -4,14 +4,23 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)ft_csrf=([^;]+)/);
+  return match ? match[1] : null;
+}
+
 export async function api<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
+    const csrfToken = getCsrfToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+      ...(options?.headers as Record<string, string>),
+    };
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
     });
 
     const json = await response.json();

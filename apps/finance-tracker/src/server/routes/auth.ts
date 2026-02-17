@@ -3,7 +3,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@workspace/database';
 import { JWT_SECRET, SALT_ROUNDS, TOKEN_EXPIRY, COOKIE_NAME } from '../config.js';
-import { requireAuth } from '../middleware/auth.js';
+import { createRequireAuth } from '../middleware/auth.js';
+import { loginLimiter, registerLimiter, resetPasswordLimiter } from '../middleware/rateLimit.js';
 import type { JwtPayload } from '../types.js';
 import { type Response } from 'express';
 
@@ -13,8 +14,8 @@ function setCookie(res: Response, token: string): void {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
     path: '/',
   });
 }
@@ -25,9 +26,10 @@ function signToken(payload: JwtPayload): string {
 
 export function authRouter(prisma: PrismaClient): Router {
   const router = Router();
+  const requireAuth = createRequireAuth(prisma);
 
   // POST /api/auth/register
-  router.post('/register', async (req, res) => {
+  router.post('/register', registerLimiter, async (req, res) => {
     try {
       const { username, displayName, password } = req.body;
 
@@ -84,7 +86,11 @@ export function authRouter(prisma: PrismaClient): Router {
         return user;
       });
 
-      const token = signToken({ id: result.id, username: result.username });
+      const token = signToken({
+        id: result.id,
+        username: result.username,
+        tokenVersion: result.tokenVersion,
+      });
       setCookie(res, token);
 
       res.json({
@@ -105,7 +111,7 @@ export function authRouter(prisma: PrismaClient): Router {
   });
 
   // POST /api/auth/login
-  router.post('/login', async (req, res) => {
+  router.post('/login', loginLimiter, async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -125,7 +131,11 @@ export function authRouter(prisma: PrismaClient): Router {
       return;
     }
 
-    const token = signToken({ id: user.id, username: user.username });
+    const token = signToken({
+      id: user.id,
+      username: user.username,
+      tokenVersion: user.tokenVersion,
+    });
     setCookie(res, token);
 
     res.json({
@@ -138,13 +148,18 @@ export function authRouter(prisma: PrismaClient): Router {
     });
   });
 
-  // POST /api/auth/logout
-  router.post('/logout', (_req, res) => {
+  // POST /api/auth/logout — invalidate all sessions by incrementing tokenVersion
+  router.post('/logout', requireAuth, async (req, res) => {
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+
     res.clearCookie(COOKIE_NAME, { path: '/' });
     res.json({ success: true });
   });
 
-  // GET /api/auth/me
+  // GET /api/auth/me — return current user (no sliding renewal)
   router.get('/me', requireAuth, async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
@@ -156,10 +171,6 @@ export function authRouter(prisma: PrismaClient): Router {
       return;
     }
 
-    // Re-sign JWT for sliding expiry
-    const token = signToken({ id: user.id, username: user.username });
-    setCookie(res, token);
-
     res.json({
       success: true,
       data: {
@@ -170,8 +181,8 @@ export function authRouter(prisma: PrismaClient): Router {
     });
   });
 
-  // POST /api/auth/reset-password
-  router.post('/reset-password', async (req, res) => {
+  // POST /api/auth/reset-password — increment tokenVersion to invalidate existing sessions
+  router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
     const { username, newPassword } = req.body;
 
     if (!username || typeof username !== 'string') {
@@ -197,7 +208,10 @@ export function authRouter(prisma: PrismaClient): Router {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        tokenVersion: { increment: 1 },
+      },
     });
 
     res.json({ success: true });

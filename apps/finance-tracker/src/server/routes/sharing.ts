@@ -1,15 +1,18 @@
 import { Router } from 'express';
 import { PrismaClient } from '@workspace/database';
-import { requireAuth } from '../middleware/auth.js';
+import { createRequireAuth } from '../middleware/auth.js';
+import { userSearchLimiter } from '../middleware/rateLimit.js';
+import { strictParseInt } from '../utils/parseId.js';
 
 export function sharingRouter(prisma: PrismaClient): Router {
   const router = Router();
+  const requireAuth = createRequireAuth(prisma);
 
   // All routes require authentication
   router.use(requireAuth);
 
   // GET /api/users/search?username= — search for a user by exact username (case-insensitive)
-  router.get('/users/search', async (req, res) => {
+  router.get('/users/search', userSearchLimiter, async (req, res) => {
     const username = req.query.username as string;
 
     if (!username || typeof username !== 'string') {
@@ -63,7 +66,7 @@ export function sharingRouter(prisma: PrismaClient): Router {
   // GET /api/workspace/:id/members — list all members of a workspace
   router.get('/workspace/:id/members', async (req, res) => {
     const userId = req.user!.id;
-    const workspaceId = parseInt(req.params.id, 10);
+    const workspaceId = strictParseInt(req.params.id);
 
     if (isNaN(workspaceId)) {
       res.status(400).json({ success: false, error: 'Invalid workspace id' });
@@ -100,7 +103,7 @@ export function sharingRouter(prisma: PrismaClient): Router {
   // POST /api/workspace/:id/members — add a member to a workspace
   router.post('/workspace/:id/members', async (req, res) => {
     const userId = req.user!.id;
-    const workspaceId = parseInt(req.params.id, 10);
+    const workspaceId = strictParseInt(req.params.id);
 
     if (isNaN(workspaceId)) {
       res.status(400).json({ success: false, error: 'Invalid workspace id' });
@@ -178,8 +181,8 @@ export function sharingRouter(prisma: PrismaClient): Router {
   // DELETE /api/workspace/:id/members/:userId — remove a member from a workspace
   router.delete('/workspace/:id/members/:userId', async (req, res) => {
     const currentUserId = req.user!.id;
-    const workspaceId = parseInt(req.params.id, 10);
-    const targetUserId = parseInt(req.params.userId, 10);
+    const workspaceId = strictParseInt(req.params.id);
+    const targetUserId = strictParseInt(req.params.userId);
 
     if (isNaN(workspaceId) || isNaN(targetUserId)) {
       res.status(400).json({ success: false, error: 'Invalid workspace or user id' });
