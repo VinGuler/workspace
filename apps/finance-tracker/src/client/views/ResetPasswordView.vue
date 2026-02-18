@@ -1,17 +1,30 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { RouterLink } from 'vue-router';
 
 const { t } = useI18n();
 const auth = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 
-const username = ref('');
+const token = ref('');
 const newPassword = ref('');
 const confirmPassword = ref('');
 const localError = ref<string | null>(null);
 const success = ref(false);
+
+onMounted(() => {
+  const tokenParam = route.query.token;
+  if (!tokenParam || typeof tokenParam !== 'string') {
+    // No token in URL — redirect to forgot-password
+    router.replace('/forgot-password');
+    return;
+  }
+  token.value = tokenParam;
+});
 
 async function handleSubmit() {
   localError.value = null;
@@ -21,12 +34,7 @@ async function handleSubmit() {
     return;
   }
 
-  if (newPassword.value.length < 6) {
-    localError.value = t('auth.passwordTooShort');
-    return;
-  }
-
-  const result = await auth.resetPassword(username.value, newPassword.value);
+  const result = await auth.resetPasswordWithToken(token.value, newPassword.value);
   if (result) {
     success.value = true;
   }
@@ -39,7 +47,7 @@ async function handleSubmit() {
       class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl shadow-black/30 p-8"
     >
       <h2 class="text-2xl font-bold text-center text-slate-100 mb-6">
-        {{ t('auth.resetPassword') }}
+        {{ t('auth.resetPasswordWithToken') }}
       </h2>
 
       <div v-if="success" class="space-y-4">
@@ -58,23 +66,6 @@ async function handleSubmit() {
 
       <form v-else class="space-y-4" @submit.prevent="handleSubmit">
         <div>
-          <label for="username" class="block text-sm font-medium text-slate-300 mb-1">{{
-            t('auth.username')
-          }}</label>
-          <input
-            id="username"
-            v-model="username"
-            type="text"
-            required
-            minlength="3"
-            maxlength="30"
-            autocomplete="username"
-            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
-            :placeholder="t('auth.usernamePlaceholder')"
-          />
-        </div>
-
-        <div>
           <label for="newPassword" class="block text-sm font-medium text-slate-300 mb-1">{{
             t('auth.newPassword')
           }}</label>
@@ -83,12 +74,12 @@ async function handleSubmit() {
             v-model="newPassword"
             type="password"
             required
-            minlength="6"
+            minlength="8"
             autocomplete="new-password"
             class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
             :placeholder="t('auth.newPasswordPlaceholder')"
           />
-          <p class="mt-1 text-xs text-slate-500">{{ t('auth.passwordHint') }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ t('auth.passwordHintNew') }}</p>
         </div>
 
         <div>
@@ -100,7 +91,7 @@ async function handleSubmit() {
             v-model="confirmPassword"
             type="password"
             required
-            minlength="6"
+            minlength="8"
             autocomplete="new-password"
             class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
             :placeholder="t('auth.confirmPasswordPlaceholder')"
@@ -116,7 +107,7 @@ async function handleSubmit() {
           :disabled="auth.loading"
           class="w-full py-2.5 px-4 bg-violet-600 text-white font-medium rounded-lg hover:bg-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {{ auth.loading ? t('auth.resettingPassword') : t('auth.resetPassword') }}
+          {{ auth.loading ? t('auth.resettingPassword') : t('auth.resetPasswordWithToken') }}
         </button>
       </form>
 

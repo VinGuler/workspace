@@ -39,6 +39,15 @@ export const resetPasswordLimiter = createLimiter({
   message: { success: false, error: 'Too many password reset attempts, please try again later' },
 });
 
+// Forgot password: 3 per hour per IP
+export const forgotPasswordLimiter = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many password reset requests, please try again later' },
+});
+
 // User search: 20 per minute per IP
 export const userSearchLimiter = createLimiter({
   windowMs: 60 * 1000,

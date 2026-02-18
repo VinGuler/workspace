@@ -53,7 +53,7 @@ async function handleSubmit() {
           />
           <div class="mt-1 text-end">
             <RouterLink
-              to="/reset-password"
+              to="/forgot-password"
               class="text-xs text-violet-400 hover:text-violet-300 font-medium"
               >{{ t('auth.forgotPassword') }}</RouterLink
             >

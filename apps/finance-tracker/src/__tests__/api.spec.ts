@@ -1,6 +1,11 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { app, prisma } from '../server/index';
+
+// Mock the email service so no real SMTP calls are made in tests
+vi.mock('../server/services/email', () => ({
+  sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
+}));
 
 const CSRF_TOKEN = 'test-csrf-token';
 const CSRF_COOKIE = `ft_csrf=${CSRF_TOKEN}`;
@@ -9,13 +14,14 @@ const CSRF_COOKIE = `ft_csrf=${CSRF_TOKEN}`;
 async function registerUser(
   username: string,
   displayName: string,
-  password: string
+  password: string,
+  email?: string
 ): Promise<{ cookie: string[]; userId: number; workspaceId: number }> {
   const res = await request(app)
     .post('/api/auth/register')
     .set('Cookie', CSRF_COOKIE)
     .set('x-csrf-token', CSRF_TOKEN)
-    .send({ username, displayName, password });
+    .send({ username, displayName, password, email: email ?? `${username}@example.com` });
   const cookies = res.headers['set-cookie'] as unknown as string[];
   const cookie = [...cookies, CSRF_COOKIE];
 
@@ -43,6 +49,7 @@ function deleteWithCsrf(url: string) {
 
 // Clean DB before each test
 beforeEach(async () => {
+  await prisma.passwordResetToken.deleteMany();
   await prisma.completedCycle.deleteMany();
   await prisma.item.deleteMany();
   await prisma.workspaceUser.deleteMany();
@@ -69,7 +76,8 @@ describe('Finance Tracker API', () => {
       const res = await postWithCsrf('/api/auth/register').send({
         username: 'testuser',
         displayName: 'Test User',
-        password: 'password123',
+        password: 'Password123',
+        email: 'test@example.com',
       });
 
       expect(res.status).toBe(200);
@@ -79,17 +87,42 @@ describe('Finance Tracker API', () => {
       expect(res.headers['set-cookie']).toBeDefined();
     });
 
+    it('POST /api/auth/register without email returns 400', async () => {
+      const res = await postWithCsrf('/api/auth/register').send({
+        username: 'noemail',
+        displayName: 'No Email',
+        password: 'Password123',
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/email/i);
+    });
+
+    it('POST /api/auth/register with weak password returns 400', async () => {
+      const res = await postWithCsrf('/api/auth/register').send({
+        username: 'weakpw',
+        displayName: 'Weak PW',
+        password: 'simple',
+        email: 'weak@example.com',
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/8 characters/);
+    });
+
     it('POST /api/auth/register with duplicate username returns 409', async () => {
       await postWithCsrf('/api/auth/register').send({
         username: 'dupuser',
         displayName: 'User 1',
-        password: 'password123',
+        password: 'Password123',
+        email: 'dup1@example.com',
       });
 
       const res = await postWithCsrf('/api/auth/register').send({
         username: 'dupuser',
         displayName: 'User 2',
-        password: 'password456',
+        password: 'Password456',
+        email: 'dup2@example.com',
       });
 
       expect(res.status).toBe(409);
@@ -100,12 +133,13 @@ describe('Finance Tracker API', () => {
       await postWithCsrf('/api/auth/register').send({
         username: 'loginuser',
         displayName: 'Login User',
-        password: 'password123',
+        password: 'Password123',
+        email: 'login@example.com',
       });
 
       const res = await postWithCsrf('/api/auth/login').send({
         username: 'loginuser',
-        password: 'password123',
+        password: 'Password123',
       });
 
       expect(res.status).toBe(200);
@@ -118,7 +152,8 @@ describe('Finance Tracker API', () => {
       await postWithCsrf('/api/auth/register').send({
         username: 'badpw',
         displayName: 'Bad PW',
-        password: 'password123',
+        password: 'Password123',
+        email: 'badpw@example.com',
       });
 
       const res = await postWithCsrf('/api/auth/login').send({
@@ -136,7 +171,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('GET /api/auth/me with valid cookie returns user', async () => {
-      const { cookie } = await registerUser('meuser', 'Me User', 'password123');
+      const { cookie } = await registerUser('meuser', 'Me User', 'Password123');
 
       const res = await request(app).get('/api/auth/me').set('Cookie', cookie);
 
@@ -146,7 +181,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('POST /api/auth/logout clears cookie and invalidates token', async () => {
-      const { cookie } = await registerUser('logoutuser', 'Logout User', 'password123');
+      const { cookie } = await registerUser('logoutuser', 'Logout User', 'Password123');
 
       const res = await request(app)
         .post('/api/auth/logout')
@@ -157,69 +192,243 @@ describe('Finance Tracker API', () => {
       expect(res.body.success).toBe(true);
     });
 
-    it('POST /api/auth/reset-password resets user password', { timeout: 15000 }, async () => {
-      await postWithCsrf('/api/auth/register').send({
-        username: 'resetuser',
-        displayName: 'Reset User',
-        password: 'oldpassword',
+    describe('Forgot password + token-based reset', () => {
+      it('POST /api/auth/forgot-password always returns 200 (no enumeration)', async () => {
+        // Non-existent user — still 200
+        const res = await postWithCsrf('/api/auth/forgot-password').send({
+          username: 'nonexistent',
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
       });
 
-      const res = await postWithCsrf('/api/auth/reset-password').send({
-        username: 'resetuser',
-        newPassword: 'newpassword123',
+      it('POST /api/auth/forgot-password creates token for existing user', async () => {
+        await postWithCsrf('/api/auth/register').send({
+          username: 'forgotuser',
+          displayName: 'Forgot User',
+          password: 'Password123',
+          email: 'forgot@example.com',
+        });
+
+        const res = await postWithCsrf('/api/auth/forgot-password').send({
+          username: 'forgotuser',
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        // Token should exist in DB
+        const tokens = await prisma.passwordResetToken.findMany();
+        expect(tokens).toHaveLength(1);
+        expect(tokens[0].usedAt).toBeNull();
       });
+
+      it(
+        'POST /api/auth/reset-password with valid token resets password',
+        { timeout: 15000 },
+        async () => {
+          await postWithCsrf('/api/auth/register').send({
+            username: 'resetuser',
+            displayName: 'Reset User',
+            password: 'OldPass123',
+            email: 'reset@example.com',
+          });
+
+          await postWithCsrf('/api/auth/forgot-password').send({ username: 'resetuser' });
+
+          // Get the raw token from the DB (we stored the hash; use the unhashed version sent in email)
+          // Instead, directly create a token we know
+          const { createHash, randomBytes } = await import('crypto');
+          const rawToken = randomBytes(32).toString('hex');
+          const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+          const user = await prisma.user.findUnique({ where: { username: 'resetuser' } });
+          await prisma.passwordResetToken.deleteMany(); // clear auto-created one
+          await prisma.passwordResetToken.create({
+            data: {
+              userId: user!.id,
+              tokenHash,
+              expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+            },
+          });
+
+          const res = await postWithCsrf('/api/auth/reset-password').send({
+            token: rawToken,
+            newPassword: 'NewPass456',
+          });
+
+          expect(res.status).toBe(200);
+          expect(res.body.success).toBe(true);
+
+          // Old password no longer works
+          const oldLogin = await postWithCsrf('/api/auth/login').send({
+            username: 'resetuser',
+            password: 'OldPass123',
+          });
+          expect(oldLogin.status).toBe(401);
+
+          // New password works
+          const newLogin = await postWithCsrf('/api/auth/login').send({
+            username: 'resetuser',
+            password: 'NewPass456',
+          });
+          expect(newLogin.status).toBe(200);
+        }
+      );
+
+      it('POST /api/auth/reset-password with used token returns 400', async () => {
+        const { createHash, randomBytes } = await import('crypto');
+        const rawToken = randomBytes(32).toString('hex');
+        const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+        await postWithCsrf('/api/auth/register').send({
+          username: 'usedtoken',
+          displayName: 'Used Token',
+          password: 'Password123',
+          email: 'used@example.com',
+        });
+        const user = await prisma.user.findUnique({ where: { username: 'usedtoken' } });
+        await prisma.passwordResetToken.create({
+          data: {
+            userId: user!.id,
+            tokenHash,
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+            usedAt: new Date(), // already used
+          },
+        });
+
+        const res = await postWithCsrf('/api/auth/reset-password').send({
+          token: rawToken,
+          newPassword: 'NewPass789',
+        });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Invalid or expired reset token');
+      });
+
+      it('POST /api/auth/reset-password with expired token returns 400', async () => {
+        const { createHash, randomBytes } = await import('crypto');
+        const rawToken = randomBytes(32).toString('hex');
+        const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+        await postWithCsrf('/api/auth/register').send({
+          username: 'expiredtoken',
+          displayName: 'Expired Token',
+          password: 'Password123',
+          email: 'expired@example.com',
+        });
+        const user = await prisma.user.findUnique({ where: { username: 'expiredtoken' } });
+        await prisma.passwordResetToken.create({
+          data: {
+            userId: user!.id,
+            tokenHash,
+            expiresAt: new Date(Date.now() - 1000), // already expired
+          },
+        });
+
+        const res = await postWithCsrf('/api/auth/reset-password').send({
+          token: rawToken,
+          newPassword: 'NewPass789',
+        });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toBe('Invalid or expired reset token');
+      });
+
+      it('POST /api/auth/reset-password validates password policy', async () => {
+        const { createHash, randomBytes } = await import('crypto');
+        const rawToken = randomBytes(32).toString('hex');
+        const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+        await postWithCsrf('/api/auth/register').send({
+          username: 'weakreset',
+          displayName: 'Weak Reset',
+          password: 'Password123',
+          email: 'weakreset@example.com',
+        });
+        const user = await prisma.user.findUnique({ where: { username: 'weakreset' } });
+        await prisma.passwordResetToken.create({
+          data: {
+            userId: user!.id,
+            tokenHash,
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+          },
+        });
+
+        const res = await postWithCsrf('/api/auth/reset-password').send({
+          token: rawToken,
+          newPassword: 'simple',
+        });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/8 characters/);
+      });
+    });
+  });
+
+  describe('User email endpoints', () => {
+    it('GET /api/user/me/email returns masked email', async () => {
+      const { cookie } = await registerUser(
+        'emailuser',
+        'Email User',
+        'Password123',
+        'emailuser@example.com'
+      );
+
+      const res = await request(app).get('/api/user/me/email').set('Cookie', cookie);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-
-      // Verify old password no longer works
-      const oldLoginRes = await postWithCsrf('/api/auth/login').send({
-        username: 'resetuser',
-        password: 'oldpassword',
-      });
-
-      expect(oldLoginRes.status).toBe(401);
-
-      // Verify new password works
-      const newLoginRes = await postWithCsrf('/api/auth/login').send({
-        username: 'resetuser',
-        password: 'newpassword123',
-      });
-
-      expect(newLoginRes.status).toBe(200);
-      expect(newLoginRes.body.success).toBe(true);
+      expect(res.body.data.maskedEmail).toMatch(/@example\.com$/);
+      // Should be masked (not full email)
+      expect(res.body.data.maskedEmail).not.toBe('emailuser@example.com');
     });
 
-    it('POST /api/auth/reset-password returns 404 for non-existent user', async () => {
-      const res = await postWithCsrf('/api/auth/reset-password').send({
-        username: 'nonexistent',
-        newPassword: 'newpassword123',
-      });
-
-      expect(res.status).toBe(404);
-      expect(res.body.error).toBe('Username not found');
+    it('GET /api/user/me/email without auth returns 401', async () => {
+      const res = await request(app).get('/api/user/me/email');
+      expect(res.status).toBe(401);
     });
 
-    it('POST /api/auth/reset-password validates password length', async () => {
-      await postWithCsrf('/api/auth/register').send({
-        username: 'shortpw',
-        displayName: 'Short PW',
-        password: 'password123',
-      });
+    it('PUT /api/user/email updates email with correct password', async () => {
+      const { cookie } = await registerUser(
+        'updateemail',
+        'Update Email',
+        'Password123',
+        'old@example.com'
+      );
 
-      const res = await postWithCsrf('/api/auth/reset-password').send({
-        username: 'shortpw',
-        newPassword: '12345',
-      });
+      const res = await request(app)
+        .put('/api/user/email')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({ currentPassword: 'Password123', newEmail: 'new@example.com' });
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Password must be at least 6 characters');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.maskedEmail).toMatch(/@example\.com$/);
+    });
+
+    it('PUT /api/user/email with wrong password returns 401', async () => {
+      const { cookie } = await registerUser(
+        'wrongpw',
+        'Wrong PW',
+        'Password123',
+        'wrongpw@example.com'
+      );
+
+      const res = await request(app)
+        .put('/api/user/email')
+        .set('Cookie', cookie)
+        .set('x-csrf-token', CSRF_TOKEN)
+        .send({ currentPassword: 'wrongpassword', newEmail: 'new@example.com' });
+
+      expect(res.status).toBe(401);
     });
   });
 
   describe('Workspace', () => {
     it('GET /api/workspace returns user workspace with empty items', async () => {
-      const { cookie } = await registerUser('wsuser', 'WS User', 'password123');
+      const { cookie } = await registerUser('wsuser', 'WS User', 'Password123');
 
       const res = await request(app).get('/api/workspace').set('Cookie', cookie);
 
@@ -231,7 +440,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('GET /api/workspace/cycles returns empty list initially', async () => {
-      const { cookie } = await registerUser('cycleuser', 'Cycle User', 'password123');
+      const { cookie } = await registerUser('cycleuser', 'Cycle User', 'Password123');
 
       const res = await request(app).get('/api/workspace/cycles').set('Cookie', cookie);
 
@@ -241,7 +450,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('GET /api/workspace/cycles returns completed cycles after reset', async () => {
-      const { cookie, workspaceId } = await registerUser('resetcycle', 'Reset User', 'password123');
+      const { cookie, workspaceId } = await registerUser('resetcycle', 'Reset User', 'Password123');
 
       // Create an item
       await request(app)
@@ -275,7 +484,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('PUT /api/workspace/balance updates balance', async () => {
-      const { cookie, workspaceId } = await registerUser('baluser', 'Bal User', 'password123');
+      const { cookie, workspaceId } = await registerUser('baluser', 'Bal User', 'Password123');
 
       const res = await request(app)
         .put('/api/workspace/balance')
@@ -295,7 +504,7 @@ describe('Finance Tracker API', () => {
 
   describe('Items', () => {
     it('POST /api/items creates item', async () => {
-      const { cookie, workspaceId } = await registerUser('itemuser', 'Item User', 'password123');
+      const { cookie, workspaceId } = await registerUser('itemuser', 'Item User', 'Password123');
 
       const res = await request(app)
         .post('/api/items')
@@ -317,7 +526,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('POST /api/items with invalid dayOfMonth returns 400', async () => {
-      const { cookie, workspaceId } = await registerUser('badday', 'Bad Day', 'password123');
+      const { cookie, workspaceId } = await registerUser('badday', 'Bad Day', 'Password123');
 
       const res = await request(app)
         .post('/api/items')
@@ -335,7 +544,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('PUT /api/items/:id updates item', async () => {
-      const { cookie, workspaceId } = await registerUser('upitem', 'Up Item', 'password123');
+      const { cookie, workspaceId } = await registerUser('upitem', 'Up Item', 'Password123');
 
       const createRes = await request(app)
         .post('/api/items')
@@ -363,7 +572,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('PUT /api/items/:id toggles isPaid and adjusts balance', async () => {
-      const { cookie, workspaceId } = await registerUser('paiduser', 'Paid User', 'password123');
+      const { cookie, workspaceId } = await registerUser('paiduser', 'Paid User', 'Password123');
 
       // Set initial balance
       await request(app)
@@ -399,7 +608,7 @@ describe('Finance Tracker API', () => {
     });
 
     it('DELETE /api/items/:id removes item', async () => {
-      const { cookie, workspaceId } = await registerUser('delitem', 'Del Item', 'password123');
+      const { cookie, workspaceId } = await registerUser('delitem', 'Del Item', 'Password123');
 
       const createRes = await request(app)
         .post('/api/items')
@@ -431,8 +640,8 @@ describe('Finance Tracker API', () => {
 
   describe('Sharing', () => {
     it('GET /api/users/search finds user by username', async () => {
-      const { cookie } = await registerUser('searcher', 'Searcher', 'password123');
-      await registerUser('findme', 'Find Me', 'password123');
+      const { cookie } = await registerUser('searcher', 'Searcher', 'Password123');
+      await registerUser('findme', 'Find Me', 'Password123');
 
       const res = await request(app).get('/api/users/search?username=findme').set('Cookie', cookie);
 
@@ -442,8 +651,8 @@ describe('Finance Tracker API', () => {
     });
 
     it('POST /api/workspace/:id/members adds member', async () => {
-      const owner = await registerUser('owner1', 'Owner', 'password123');
-      const viewer = await registerUser('viewer1', 'Viewer', 'password123');
+      const owner = await registerUser('owner1', 'Owner', 'Password123');
+      const viewer = await registerUser('viewer1', 'Viewer', 'Password123');
 
       const res = await request(app)
         .post(`/api/workspace/${owner.workspaceId}/members`)
@@ -456,8 +665,8 @@ describe('Finance Tracker API', () => {
     });
 
     it('DELETE /api/workspace/:id/members/:userId removes member', async () => {
-      const owner = await registerUser('owner2', 'Owner', 'password123');
-      const viewer = await registerUser('viewer2', 'Viewer', 'password123');
+      const owner = await registerUser('owner2', 'Owner', 'Password123');
+      const viewer = await registerUser('viewer2', 'Viewer', 'Password123');
 
       await request(app)
         .post(`/api/workspace/${owner.workspaceId}/members`)
@@ -475,8 +684,8 @@ describe('Finance Tracker API', () => {
     });
 
     it('VIEWER cannot create items (403)', async () => {
-      const owner = await registerUser('owner3', 'Owner', 'password123');
-      const viewer = await registerUser('viewer3', 'Viewer', 'password123');
+      const owner = await registerUser('owner3', 'Owner', 'Password123');
+      const viewer = await registerUser('viewer3', 'Viewer', 'Password123');
 
       await request(app)
         .post(`/api/workspace/${owner.workspaceId}/members`)

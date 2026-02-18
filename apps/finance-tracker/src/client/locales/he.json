@@ -5,7 +5,8 @@
     "shared": "משותף",
     "completedCycles": "מחזורים שהושלמו",
     "logout": "התנתק",
-    "toggleMenu": "החלף תפריט"
+    "toggleMenu": "החלף תפריט",
+    "settings": "הגדרות"
   },
   "auth": {
     "signIn": "התחבר",
@@ -37,7 +38,34 @@
     "confirmPasswordPlaceholder": "אשר סיסמה חדשה",
     "rememberPassword": "זכור את הסיסמה שלך?",
     "passwordsDoNotMatch": "הסיסמאות אינן תואמות",
-    "passwordTooShort": "הסיסמה חייבת להכיל לפחות 6 תווים"
+    "passwordTooShort": "הסיסמה חייבת להכיל לפחות 8 תווים",
+    "passwordHintNew": "8+ תווים עם אות גדולה, אות קטנה ומספר",
+    "email": "דואר אלקטרוני",
+    "emailPlaceholder": "הזן את כתובת הדואר האלקטרוני שלך",
+    "forgotPasswordTitle": "שכחת סיסמה",
+    "forgotPasswordDesc": "הזן את שם המשתמש שלך ונשלח קישור לאיפוס לדואר האלקטרוני הרשום שלך.",
+    "sendResetLink": "שלח קישור לאיפוס",
+    "sendingResetLink": "שולח...",
+    "resetLinkSent": "אם שם המשתמש קיים, נשלח קישור לאיפוס הסיסמה לכתובת הדואר האלקטרוני הרשומה שלך.",
+    "backToSignIn": "חזור להתחברות",
+    "resetTokenRequired": "נדרש אסימון איפוס. בדוק את הדואר האלקטרוני שלך לקבלת הקישור.",
+    "resetPasswordWithToken": "הגדר סיסמה חדשה",
+    "settings": "הגדרות"
+  },
+  "settings": {
+    "title": "הגדרות",
+    "emailSection": "כתובת דואר אלקטרוני",
+    "maskedEmail": "דואר אלקטרוני רשום",
+    "loadingEmail": "טוען...",
+    "updateEmail": "עדכן דואר אלקטרוני",
+    "newEmail": "דואר אלקטרוני חדש",
+    "newEmailPlaceholder": "הזן כתובת דואר אלקטרוני חדשה",
+    "currentPassword": "סיסמה נוכחית",
+    "currentPasswordPlaceholder": "הזן את הסיסמה הנוכחית שלך",
+    "saveEmail": "שמור דואר אלקטרוני",
+    "savingEmail": "שומר...",
+    "emailUpdated": "הדואר האלקטרוני עודכן בהצלחה",
+    "updateError": "עדכון הדואר האלקטרוני נכשל"
   },
   "workspace": {
     "loading": "טוען מרחב עבודה...",

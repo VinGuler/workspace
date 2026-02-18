@@ -48,13 +48,13 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = false;
   }
 
-  async function register(username: string, displayName: string, password: string) {
+  async function register(username: string, displayName: string, password: string, email: string) {
     loading.value = true;
     error.value = null;
 
     const result = await api<User>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, displayName, password }),
+      body: JSON.stringify({ username, displayName, password, email }),
     });
 
     if (result.success && result.data) {
@@ -78,13 +78,32 @@ export const useAuthStore = defineStore('auth', () => {
     await router.push('/login');
   }
 
-  async function resetPassword(username: string, newPassword: string): Promise<boolean> {
+  async function forgotPassword(username: string): Promise<boolean> {
+    loading.value = true;
+    error.value = null;
+
+    const result = await api('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ username }),
+    });
+
+    if (!result.success) {
+      error.value = result.error || 'Request failed';
+      loading.value = false;
+      return false;
+    }
+
+    loading.value = false;
+    return true;
+  }
+
+  async function resetPasswordWithToken(token: string, newPassword: string): Promise<boolean> {
     loading.value = true;
     error.value = null;
 
     const result = await api('/api/auth/reset-password', {
       method: 'POST',
-      body: JSON.stringify({ username, newPassword }),
+      body: JSON.stringify({ token, newPassword }),
     });
 
     if (!result.success) {
@@ -107,6 +126,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     logout,
-    resetPassword,
+    forgotPassword,
+    resetPasswordWithToken,
   };
 });

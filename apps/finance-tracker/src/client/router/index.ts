@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/ForgotPasswordView.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
       path: '/reset-password',
       name: 'reset-password',
       component: () => import('@/views/ResetPasswordView.vue'),
@@ -38,6 +44,12 @@ const router = createRouter({
       path: '/cycles',
       name: 'cycles',
       component: () => import('@/views/CompletedCyclesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
       meta: { requiresAuth: true },
     },
   ],

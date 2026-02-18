@@ -10,9 +10,10 @@ const auth = useAuthStore();
 const username = ref('');
 const displayName = ref('');
 const password = ref('');
+const email = ref('');
 
 async function handleSubmit() {
-  await auth.register(username.value, displayName.value, password.value);
+  await auth.register(username.value, displayName.value, password.value, email.value);
 }
 </script>
 
@@ -60,6 +61,21 @@ async function handleSubmit() {
         </div>
 
         <div>
+          <label for="email" class="block text-sm font-medium text-slate-300 mb-1">{{
+            t('auth.email')
+          }}</label>
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            required
+            autocomplete="email"
+            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
+            :placeholder="t('auth.emailPlaceholder')"
+          />
+        </div>
+
+        <div>
           <label for="password" class="block text-sm font-medium text-slate-300 mb-1">{{
             t('auth.password')
           }}</label>
@@ -68,12 +84,12 @@ async function handleSubmit() {
             v-model="password"
             type="password"
             required
-            minlength="6"
+            minlength="8"
             autocomplete="new-password"
             class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-colors"
             :placeholder="t('auth.createPassword')"
           />
-          <p class="mt-1 text-xs text-slate-500">{{ t('auth.passwordHint') }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ t('auth.passwordHintNew') }}</p>
         </div>
 
         <p v-if="auth.error" class="text-sm text-rose-400">{{ auth.error }}</p>

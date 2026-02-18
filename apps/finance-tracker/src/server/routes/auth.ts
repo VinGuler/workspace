@@ -1,14 +1,30 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaClient } from '@workspace/database';
-import { JWT_SECRET, SALT_ROUNDS, TOKEN_EXPIRY, COOKIE_NAME } from '../config.js';
+import {
+  JWT_SECRET,
+  SALT_ROUNDS,
+  TOKEN_EXPIRY,
+  COOKIE_NAME,
+  APP_BASE_URL,
+  RESET_TOKEN_EXPIRY_MS,
+} from '../config.js';
 import { createRequireAuth } from '../middleware/auth.js';
-import { loginLimiter, registerLimiter, resetPasswordLimiter } from '../middleware/rateLimit.js';
+import {
+  loginLimiter,
+  registerLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
+} from '../middleware/rateLimit.js';
+import { encryptEmail, hashEmail } from '../services/encryption.js';
+import { sendPasswordResetEmail } from '../services/email.js';
 import type { JwtPayload } from '../types.js';
 import { type Response } from 'express';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function setCookie(res: Response, token: string): void {
   res.cookie(COOKIE_NAME, token, {
@@ -24,6 +40,26 @@ function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
 }
 
+// Returns an error message if invalid, null if valid.
+export function validatePassword(p: string): string | null {
+  if (!p || typeof p !== 'string') {
+    return 'Password must be at least 8 characters and include uppercase, lowercase, and a number';
+  }
+  if (p.length < 8) {
+    return 'Password must be at least 8 characters and include uppercase, lowercase, and a number';
+  }
+  if (!/[A-Z]/.test(p)) {
+    return 'Password must be at least 8 characters and include uppercase, lowercase, and a number';
+  }
+  if (!/[a-z]/.test(p)) {
+    return 'Password must be at least 8 characters and include uppercase, lowercase, and a number';
+  }
+  if (!/[0-9]/.test(p)) {
+    return 'Password must be at least 8 characters and include uppercase, lowercase, and a number';
+  }
+  return null;
+}
+
 export function authRouter(prisma: PrismaClient): Router {
   const router = Router();
   const requireAuth = createRequireAuth(prisma);
@@ -31,9 +67,8 @@ export function authRouter(prisma: PrismaClient): Router {
   // POST /api/auth/register
   router.post('/register', registerLimiter, async (req, res) => {
     try {
-      const { username, displayName, password } = req.body;
+      const { username, displayName, password, email } = req.body;
 
-      // Validation
       if (!username || !USERNAME_REGEX.test(username)) {
         res.status(400).json({
           success: false,
@@ -51,23 +86,29 @@ export function authRouter(prisma: PrismaClient): Router {
         return;
       }
 
-      if (!password || typeof password !== 'string' || password.length < 6) {
-        res.status(400).json({
-          success: false,
-          error: 'Password must be at least 6 characters',
-        });
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        res.status(400).json({ success: false, error: passwordError });
         return;
       }
 
+      if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email)) {
+        res.status(400).json({ success: false, error: 'A valid email address is required' });
+        return;
+      }
+
+      const emailHash = hashEmail(email);
+      const emailEncrypted = encryptEmail(email.trim().toLowerCase());
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-      // Create user, workspace, and ownership in a transaction
       const result = await prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
             username,
             displayName: trimmedDisplayName,
             passwordHash,
+            emailHash,
+            emailEncrypted,
           },
         });
 
@@ -103,7 +144,10 @@ export function authRouter(prisma: PrismaClient): Router {
       });
     } catch (err: any) {
       if (err?.code === 'P2002') {
-        res.status(409).json({ success: false, error: 'Username already taken' });
+        const field = err?.meta?.target?.includes('email_hash')
+          ? 'Email already registered'
+          : 'Username already taken';
+        res.status(409).json({ success: false, error: field });
         return;
       }
       throw err;
@@ -181,38 +225,87 @@ export function authRouter(prisma: PrismaClient): Router {
     });
   });
 
-  // POST /api/auth/reset-password — increment tokenVersion to invalidate existing sessions
-  router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
-    const { username, newPassword } = req.body;
+  // POST /api/auth/forgot-password — send reset email (always 200, no username enumeration)
+  router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
+    const { username } = req.body;
 
     if (!username || typeof username !== 'string') {
       res.status(400).json({ success: false, error: 'Username is required' });
       return;
     }
 
-    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
-      res.status(400).json({
-        success: false,
-        error: 'Password must be at least 6 characters',
-      });
+    // Always return success to prevent username enumeration
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user) {
+      res.json({ success: true });
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
-    if (!user) {
-      res.status(404).json({ success: false, error: 'Username not found' });
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
+
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    const { decryptEmail } = await import('../services/encryption.js');
+    const email = decryptEmail(user.emailEncrypted);
+    const resetUrl = `${APP_BASE_URL}/reset-password?token=${rawToken}`;
+
+    try {
+      await sendPasswordResetEmail(email, resetUrl);
+    } catch {
+      // Don't expose email delivery errors to the client
+    }
+
+    res.json({ success: true });
+  });
+
+  // POST /api/auth/reset-password — validate token, update password
+  router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
+    const { token, newPassword } = req.body;
+
+    if (!token || typeof token !== 'string') {
+      res.status(400).json({ success: false, error: 'Reset token is required' });
+      return;
+    }
+
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      res.status(400).json({ success: false, error: passwordError });
+      return;
+    }
+
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const record = await prisma.passwordResetToken.findFirst({
+      where: { tokenHash },
+    });
+
+    if (!record || record.usedAt !== null || record.expiresAt < new Date()) {
+      res.status(400).json({ success: false, error: 'Invalid or expired reset token' });
       return;
     }
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash,
-        tokenVersion: { increment: 1 },
-      },
-    });
+    await prisma.$transaction([
+      prisma.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      prisma.user.update({
+        where: { id: record.userId },
+        data: {
+          passwordHash,
+          tokenVersion: { increment: 1 },
+        },
+      }),
+    ]);
 
     res.json({ success: true });
   });

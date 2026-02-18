@@ -11,6 +11,7 @@ import { authRouter } from './routes/auth.js';
 import { workspaceRouter } from './routes/workspace.js';
 import { itemsRouter } from './routes/items.js';
 import { sharingRouter } from './routes/sharing.js';
+import { userRouter } from './routes/user.js';
 import { errorHandler } from './middleware/error.js';
 import { csrfProtection, setCsrfCookie } from './middleware/csrf.js';
 
@@ -53,6 +54,7 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', authRouter(prisma));
 app.use('/api/workspace', workspaceRouter(prisma));
 app.use('/api/items', itemsRouter(prisma));
+app.use('/api/user', userRouter(prisma));
 app.use('/api', sharingRouter(prisma));
 
 // Serve Vite build output with SPA fallback

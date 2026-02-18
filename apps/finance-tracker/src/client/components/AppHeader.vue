@@ -50,6 +50,12 @@ function toggleLocale() {
               active-class="!text-violet-400"
               >{{ t('nav.shared') }}</RouterLink
             >
+            <RouterLink
+              to="/settings"
+              class="text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+              active-class="!text-violet-400"
+              >{{ t('nav.settings') }}</RouterLink
+            >
           </nav>
         </div>
 
@@ -128,6 +134,13 @@ function toggleLocale() {
             active-class="!text-violet-400 bg-violet-500/10"
             @click="closeMobileMenu"
             >{{ t('nav.completedCycles') }}</RouterLink
+          >
+          <RouterLink
+            to="/settings"
+            class="text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors py-2 px-3 rounded-lg hover:bg-slate-800/50"
+            active-class="!text-violet-400 bg-violet-500/10"
+            @click="closeMobileMenu"
+            >{{ t('nav.settings') }}</RouterLink
           >
 
           <div class="pt-3 mt-3 border-t border-slate-800 flex items-center justify-between">

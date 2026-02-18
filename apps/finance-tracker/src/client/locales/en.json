@@ -5,7 +5,8 @@
     "shared": "Shared",
     "completedCycles": "Completed Cycles",
     "logout": "Logout",
-    "toggleMenu": "Toggle menu"
+    "toggleMenu": "Toggle menu",
+    "settings": "Settings"
   },
   "auth": {
     "signIn": "Sign In",
@@ -37,7 +38,34 @@
     "confirmPasswordPlaceholder": "Confirm new password",
     "rememberPassword": "Remember your password?",
     "passwordsDoNotMatch": "Passwords do not match",
-    "passwordTooShort": "Password must be at least 6 characters"
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordHintNew": "8+ characters with uppercase, lowercase, and a number",
+    "email": "Email",
+    "emailPlaceholder": "Enter your email address",
+    "forgotPasswordTitle": "Forgot Password",
+    "forgotPasswordDesc": "Enter your username and we'll send a reset link to your registered email.",
+    "sendResetLink": "Send Reset Link",
+    "sendingResetLink": "Sending...",
+    "resetLinkSent": "If that username exists, a password reset link has been sent to your registered email address.",
+    "backToSignIn": "Back to Sign In",
+    "resetTokenRequired": "A reset token is required. Check your email for the link.",
+    "resetPasswordWithToken": "Set New Password",
+    "settings": "Settings"
+  },
+  "settings": {
+    "title": "Settings",
+    "emailSection": "Email Address",
+    "maskedEmail": "Registered email",
+    "loadingEmail": "Loading...",
+    "updateEmail": "Update Email",
+    "newEmail": "New Email",
+    "newEmailPlaceholder": "Enter new email address",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter your current password",
+    "saveEmail": "Save Email",
+    "savingEmail": "Saving...",
+    "emailUpdated": "Email updated successfully",
+    "updateError": "Failed to update email"
   },
   "workspace": {
     "loading": "Loading workspace...",
