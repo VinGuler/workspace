@@ -254,7 +254,8 @@ export function authRouter(prisma: PrismaClient): Router {
     });
 
     if (!user.emailEncrypted) {
-      // User pre-dates email collection — silently succeed to prevent enumeration
+      // User pre-dates email collection — no email to send
+      console.warn(`[forgot-password] user ${user.id} has no email on record`);
       res.json({ success: true });
       return;
     }
@@ -265,8 +266,10 @@ export function authRouter(prisma: PrismaClient): Router {
 
     try {
       await sendPasswordResetEmail(email, resetUrl);
-    } catch {
-      // Don't expose email delivery errors to the client
+      console.info(`[forgot-password] reset email sent to user ${user.id}`);
+    } catch (err) {
+      // Don't expose email delivery errors to the client, but log for ops visibility
+      console.error('[forgot-password] failed to send reset email:', err);
     }
 
     res.json({ success: true });
