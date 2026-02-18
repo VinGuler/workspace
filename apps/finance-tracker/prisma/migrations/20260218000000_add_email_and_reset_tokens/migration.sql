@@ -1,8 +1,8 @@
--- AlterTable: add email fields to users
-ALTER TABLE "users" ADD COLUMN "email_hash" TEXT NOT NULL DEFAULT '';
-ALTER TABLE "users" ADD COLUMN "email_encrypted" TEXT NOT NULL DEFAULT '';
+-- AlterTable: add email fields to users (nullable — existing users have no email)
+ALTER TABLE "users" ADD COLUMN "email_hash" TEXT;
+ALTER TABLE "users" ADD COLUMN "email_encrypted" TEXT;
 
--- CreateIndex: unique constraint on email_hash
+-- CreateIndex: unique constraint on email_hash (NULLs are not considered equal in PostgreSQL)
 CREATE UNIQUE INDEX "users_email_hash_key" ON "users"("email_hash");
 
 -- CreateTable: password_reset_tokens

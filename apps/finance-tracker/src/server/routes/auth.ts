@@ -253,6 +253,12 @@ export function authRouter(prisma: PrismaClient): Router {
       },
     });
 
+    if (!user.emailEncrypted) {
+      // User pre-dates email collection — silently succeed to prevent enumeration
+      res.json({ success: true });
+      return;
+    }
+
     const { decryptEmail } = await import('../services/encryption.js');
     const email = decryptEmail(user.emailEncrypted);
     const resetUrl = `${APP_BASE_URL}/reset-password?token=${rawToken}`;

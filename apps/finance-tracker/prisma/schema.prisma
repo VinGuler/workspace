@@ -26,8 +26,8 @@ model User {
   displayName    String               @map("display_name")
   passwordHash   String               @map("password_hash")
   tokenVersion   Int                  @default(0) @map("token_version")
-  emailHash      String               @unique @map("email_hash")
-  emailEncrypted String               @map("email_encrypted")
+  emailHash      String?              @unique @map("email_hash")
+  emailEncrypted String?              @map("email_encrypted")
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
   workspaces     WorkspaceUser[]

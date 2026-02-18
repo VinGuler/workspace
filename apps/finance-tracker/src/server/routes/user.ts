@@ -26,6 +26,11 @@ export function userRouter(prisma: PrismaClient): Router {
       return;
     }
 
+    if (!user.emailEncrypted) {
+      res.json({ success: true, data: { maskedEmail: null } });
+      return;
+    }
+
     const email = decryptEmail(user.emailEncrypted);
     res.json({ success: true, data: { maskedEmail: maskEmail(email) } });
   });
