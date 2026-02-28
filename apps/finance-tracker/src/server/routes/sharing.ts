@@ -1,15 +1,9 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { PrismaClient } from '@workspace/database';
-import { createRequireAuth } from '../middleware/auth.js';
-import { userSearchLimiter } from '../middleware/rateLimit.js';
 import { strictParseInt } from '../utils/parseId.js';
 
-export function sharingRouter(prisma: PrismaClient): Router {
+export function sharingRouter(prisma: PrismaClient, userSearchLimiter: RequestHandler): Router {
   const router = Router();
-  const requireAuth = createRequireAuth(prisma);
-
-  // All routes require authentication
-  router.use(requireAuth);
 
   // GET /api/users/search?username= — search for a user by exact username (case-insensitive)
   router.get('/users/search', userSearchLimiter, async (req, res) => {

@@ -7,25 +7,25 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: () => import('@/views/LoginView.vue'),
+      component: () => import('@workspace/login/views/LoginView.vue'),
       meta: { requiresAuth: false },
     },
     {
       path: '/register',
       name: 'register',
-      component: () => import('@/views/RegisterView.vue'),
+      component: () => import('@workspace/login/views/RegisterView.vue'),
       meta: { requiresAuth: false },
     },
     {
       path: '/forgot-password',
       name: 'forgot-password',
-      component: () => import('@/views/ForgotPasswordView.vue'),
+      component: () => import('@workspace/login/views/ForgotPasswordView.vue'),
       meta: { requiresAuth: false },
     },
     {
       path: '/reset-password',
       name: 'reset-password',
-      component: () => import('@/views/ResetPasswordView.vue'),
+      component: () => import('@workspace/login/views/ResetPasswordView.vue'),
       meta: { requiresAuth: false },
     },
     {

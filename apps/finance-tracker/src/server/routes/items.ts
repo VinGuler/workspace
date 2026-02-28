@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { PrismaClient } from '@workspace/database';
-import { createRequireAuth } from '../middleware/auth.js';
 import { calculateCycleDays } from '../services/cycle.js';
 import { strictParseInt } from '../utils/parseId.js';
 
@@ -39,10 +38,6 @@ async function recalculateAndUpdateCycleDays(
 
 export function itemsRouter(prisma: PrismaClient): Router {
   const router = Router();
-  const requireAuth = createRequireAuth(prisma);
-
-  // All routes require authentication
-  router.use(requireAuth);
 
   // POST /api/items — create a new item
   router.post('/', async (req, res) => {

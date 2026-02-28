@@ -2,10 +2,9 @@ import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { app, prisma } from '../server/index';
 
-// Mock the email service so no real SMTP calls are made in tests
-vi.mock('../server/services/email', () => ({
-  sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
-}));
+// Mock global fetch so the email service (inside @workspace/login) never calls
+// the Resend API or real SMTP during tests.
+vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) }));
 
 const CSRF_TOKEN = 'test-csrf-token';
 const CSRF_COOKIE = `ft_csrf=${CSRF_TOKEN}`;

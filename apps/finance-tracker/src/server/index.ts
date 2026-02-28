@@ -7,13 +7,19 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { log } from '@workspace/utils';
 import { getDatabaseUrl, createClient, checkHealth } from '@workspace/database';
-import { authRouter } from './routes/auth.js';
+import {
+  authRouter,
+  userRouter,
+  createCsrfMiddleware,
+  createRequireAuth,
+  createRateLimiters,
+} from '@workspace/login';
+import { createAuthRepository } from './auth/repository.js';
+import { authConfig } from './auth/config.js';
 import { workspaceRouter } from './routes/workspace.js';
 import { itemsRouter } from './routes/items.js';
 import { sharingRouter } from './routes/sharing.js';
-import { userRouter } from './routes/user.js';
 import { errorHandler } from './middleware/error.js';
-import { csrfProtection, setCsrfCookie } from './middleware/csrf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -39,6 +45,12 @@ if (!databaseUrl) {
 }
 const prisma = createClient(databaseUrl);
 
+// Auth setup
+const repo = createAuthRepository(prisma);
+const requireAuth = createRequireAuth(repo, authConfig);
+const { setCsrfCookie, csrfProtection } = createCsrfMiddleware(authConfig);
+const { userSearchLimiter } = createRateLimiters();
+
 // Security middleware
 app.use(helmet());
 app.use(
@@ -63,12 +75,12 @@ app.get('/api/health', async (_req, res) => {
   res.status(healthy ? 200 : 503).json({ success: healthy, status: healthy ? 'ok' : 'unhealthy' });
 });
 
-// Routes (factory pattern -- each receives prisma instance)
-app.use('/api/auth', authRouter(prisma));
-app.use('/api/workspace', workspaceRouter(prisma));
-app.use('/api/items', itemsRouter(prisma));
-app.use('/api/user', userRouter(prisma));
-app.use('/api', sharingRouter(prisma));
+// Routes
+app.use('/api/auth', authRouter(repo, authConfig));
+app.use('/api/user', userRouter(repo, authConfig));
+app.use('/api/workspace', requireAuth, workspaceRouter(prisma));
+app.use('/api/items', requireAuth, itemsRouter(prisma));
+app.use('/api', requireAuth, sharingRouter(prisma, userSearchLimiter));
 
 // Serve Vite build output with SPA fallback
 const clientPath = join(__dirname, '..', '..', 'dist', 'client');

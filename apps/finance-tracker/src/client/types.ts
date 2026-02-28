@@ -1,8 +1,4 @@
-export interface User {
-  id: string;
-  username: string;
-  displayName: string;
-}
+export type { AuthUser as User } from '@workspace/login/client';
 
 export type ItemType = 'INCOME' | 'CREDIT_CARD' | 'LOAN_PAYMENT' | 'RENT' | 'OTHER';
 

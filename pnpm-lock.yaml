@@ -71,12 +71,12 @@ importers:
       '@workspace/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@workspace/login':
+        specifier: workspace:*
+        version: link:../../packages/login
       '@workspace/utils':
         specifier: workspace:*
         version: link:../../packages/utils
-      bcrypt:
-        specifier: ^6.0.0
-        version: 6.0.0
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -89,18 +89,9 @@ importers:
       express:
         specifier: ^5.0.1
         version: 5.2.1
-      express-rate-limit:
-        specifier: ^8.2.1
-        version: 8.2.1(express@5.2.1)
       helmet:
         specifier: ^8.1.0
         version: 8.1.0
-      jsonwebtoken:
-        specifier: ^9.0.2
-        version: 9.0.3
-      nodemailer:
-        specifier: ^8.0.1
-        version: 8.0.1
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3))
@@ -120,9 +111,6 @@ importers:
       '@tsconfig/node24':
         specifier: ^24.0.3
         version: 24.0.4
-      '@types/bcrypt':
-        specifier: ^5.0.2
-        version: 5.0.2
       '@types/cookie-parser':
         specifier: ^1.4.8
         version: 1.4.10(@types/express@5.0.6)
@@ -138,15 +126,9 @@ importers:
       '@types/jsdom':
         specifier: ^27.0.0
         version: 27.0.0
-      '@types/jsonwebtoken':
-        specifier: ^9.0.9
-        version: 9.0.10
       '@types/node':
         specifier: ^24.10.4
         version: 24.10.11
-      '@types/nodemailer':
-        specifier: ^7.0.10
-        version: 7.0.10
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3

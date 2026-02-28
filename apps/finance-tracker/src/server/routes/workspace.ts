@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { PrismaClient } from '@workspace/database';
-import { createRequireAuth } from '../middleware/auth.js';
 import {
   calculateCycleDays,
   calculateBalanceCards,
@@ -13,10 +12,6 @@ import type { WorkspaceResponse } from '../types.js';
 
 export function workspaceRouter(prisma: PrismaClient): Router {
   const router = Router();
-  const requireAuth = createRequireAuth(prisma);
-
-  // All routes require authentication
-  router.use(requireAuth);
 
   // GET /api/workspace — fetch user's workspace (or a shared one via ?workspaceId=)
   router.get('/', async (req, res) => {
