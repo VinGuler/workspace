@@ -37,10 +37,10 @@ function closeDetail() {
 }
 
 const columns = [
-  { key: 'APPLIED' as const, title: t('board.applied'), color: 'bg-blue-500' },
-  { key: 'IN_PROGRESS' as const, title: t('board.inProgress'), color: 'bg-amber-500' },
-  { key: 'OFFER' as const, title: t('board.offer'), color: 'bg-green-500' },
-  { key: 'ARCHIVED' as const, title: t('board.archived'), color: 'bg-slate-500' },
+  { key: 'APPLIED' as const, titleKey: 'board.applied', color: 'bg-blue-500' },
+  { key: 'IN_PROGRESS' as const, titleKey: 'board.inProgress', color: 'bg-amber-500' },
+  { key: 'OFFER' as const, titleKey: 'board.offer', color: 'bg-green-500' },
+  { key: 'ARCHIVED' as const, titleKey: 'board.archived', color: 'bg-slate-500' },
 ];
 </script>
 
@@ -103,11 +103,11 @@ const columns = [
     </div>
 
     <!-- Kanban board -->
-    <div class="flex gap-4 overflow-x-auto pb-4">
+    <div class="flex gap-4 overflow-x-auto pb-4 w-full">
       <KanbanColumn
         v-for="col in columns"
         :key="col.key"
-        :title="col.title"
+        :title-key="col.titleKey"
         :applications="store.applicationsByStatus[col.key]"
         :color-class="col.color"
         @select="selectApplication"

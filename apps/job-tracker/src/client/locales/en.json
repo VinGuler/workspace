@@ -44,6 +44,7 @@
     "settings": "Settings"
   },
   "nav": {
+    "appName": "ApplyFlow",
     "logout": "Logout",
     "board": "Board",
     "settings": "Settings"
@@ -56,9 +57,9 @@
     "inProgress": "In Progress",
     "offer": "Offer",
     "archived": "Archived / Rejected",
-    "noApplications": "No applications yet",
     "pendingDecision": "Pending Decision",
-    "nextStep": "Next"
+    "nextStep": "Next",
+    "emptyColumn": "No applications"
   },
   "application": {
     "companyName": "Company Name",
